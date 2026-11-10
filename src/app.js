@@ -475,3 +475,6 @@ $('#r-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(state.restored.text.replace(/\f/g, '\n\n')); say('#m5', 'Texte copié.', 'ok'); }
   catch (e) { say('#m5', 'Copie impossible : sélectionnez le texte manuellement.', 'warn'); }
 });
+
+// Installation (PWA) : uniquement en HTTPS ou en local ; sans effet à l'ouverture directe du fichier.
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) { navigator.serviceWorker.register('sw.js').catch(() => {}); }

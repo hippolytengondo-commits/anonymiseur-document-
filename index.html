@@ -3,8 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data:; connect-src blob:; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src 'self' blob:; manifest-src 'self'; style-src 'unsafe-inline'; img-src data:; connect-src blob:; form-action 'none'; base-uri 'none'">
 <title>Anonymiseur de documents</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1d2b4f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Anonymiseur">
+<link rel="apple-touch-icon" href="data:image/png;base64,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">
 <style>
 :root{--ink:#1c2333;--navy:#1d2b4f;--navy2:#2c3f70;--bg:#f4f2ec;--card:#fff;--line:#dcd8cc;--muted:#6a6f7d;--gold:#7a5c1e;--ok:#2f6b4f;--warn:#9a5b00;--bad:#a12b2b}
 *{box-sizing:border-box}
@@ -1146,6 +1151,9 @@ $('#r-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(state.restored.text.replace(/\f/g, '\n\n')); say('#m5', 'Texte copié.', 'ok'); }
   catch (e) { say('#m5', 'Copie impossible : sélectionnez le texte manuellement.', 'warn'); }
 });
+
+// Installation (PWA) : uniquement en HTTPS ou en local ; sans effet à l'ouverture directe du fichier.
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) { navigator.serviceWorker.register('sw.js').catch(() => {}); }
 
 </script>
 </body>

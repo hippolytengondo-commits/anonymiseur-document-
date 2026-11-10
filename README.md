@@ -4,3 +4,12 @@ Application web 100 % locale : elle remplace les noms, entités et données iden
 
 - Aucune donnée n'est envoyée en ligne : le traitement s'effectue dans le navigateur.
 - Ce dépôt ne contient que le programme. N'y déposez jamais de document réel ni de table de correspondance.
+
+## Installation sur téléphone et ordinateur
+
+Ouvrez l'adresse du site publié, puis :
+- **Ordinateur (Chrome / Edge)** : icône « Installer » dans la barre d'adresse.
+- **Android (Chrome)** : menu ⋮ → « Installer l'application ».
+- **iPhone / iPad (Safari)** : Partager → « Sur l'écran d'accueil ».
+
+Une fois installée, l'application fonctionne hors ligne.

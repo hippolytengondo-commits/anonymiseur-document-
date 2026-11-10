@@ -3,8 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data:; connect-src blob:; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src 'self' blob:; manifest-src 'self'; style-src 'unsafe-inline'; img-src data:; connect-src blob:; form-action 'none'; base-uri 'none'">
 <title>Anonymiseur de documents</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1d2b4f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Anonymiseur">
+<link rel="apple-touch-icon" href="@@ICON180@@">
 <style>
 :root{--ink:#1c2333;--navy:#1d2b4f;--navy2:#2c3f70;--bg:#f4f2ec;--card:#fff;--line:#dcd8cc;--muted:#6a6f7d;--gold:#7a5c1e;--ok:#2f6b4f;--warn:#9a5b00;--bad:#a12b2b}
 *{box-sizing:border-box}
