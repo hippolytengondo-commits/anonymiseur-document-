@@ -128,7 +128,7 @@ function passDialog(mode) {
   else if (mode === 'change') f = field('pp-pass', t('pp.old'), 'current-password') + field('pp-new', t('pp.new'), 'new-password') + field('pp-confirm', t('pp.confirm'), 'new-password');
   else f = field('pp-pass', t('pp.label'), 'current-password');
   const help = mode === 'unlock' ? '' : `<p class="hint">${esc(t('pp.help'))}</p>`;
-  const intro = mode === 'create' ? `<p class="hint" style="margin:0 0 4px">${esc(t('vt.none.b'))}</p>` : '';
+  const intro = mode === 'create' ? `<p class="hint" style="margin:0 0 4px">${esc(t(legacyTables().length ? 'pp.legacyIntro' : 'vt.none.b'))}</p>` : mode === 'unlock' ? `<p class="hint" style="margin:0 0 4px">${esc(t('pp.unlockHint'))}</p>` : '';
   const p = openModal(`<h2 id="md-t">${esc(title)}</h2>${intro}<form id="pp-form" novalidate>${f}${help}
     <div class="msg" id="pp-err" role="alert"></div>
     <div class="row"><button class="btn" id="pp-ok" type="submit">${esc(t('pp.ok'))}</button><button class="btn sec" id="pp-cancel" type="button">${esc(t('common.cancel'))}</button></div></form>`);
@@ -255,7 +255,7 @@ function renderVault() {
   if (!vaultExists()) {
     html += `<div class="card"><h2>${ico('key')} ${esc(t('vt.none.t'))}</h2><p>${esc(t('vt.none.b'))}</p><div class="row"><button class="btn" type="button" data-vt="create">${esc(t('vt.create'))}</button></div></div>`;
   } else if (!vaultOpen()) {
-    html += `<div class="card"><h2>${ico('lock')} ${esc(t('vt.locked.t'))}</h2><p>${esc(t('vt.locked.b'))}</p><div class="row"><button class="btn" type="button" data-vt="unlock">${esc(t('vt.unlock'))}</button></div></div>`;
+    html += `<div class="card"><h2>${ico('lock')} ${esc(t('vt.locked.t'))}</h2><p>${esc(t('vt.locked.b'))}</p><p class="hint">${esc(t('pp.unlockHint'))}</p><div class="row"><button class="btn" type="button" data-vt="unlock">${esc(t('vt.unlock'))}</button></div></div>`;
   } else {
     const items = vaultList();
     html += `<div class="row" style="margin:0 0 14px"><button class="btn sec" type="button" data-vt="lock">${esc(t('vt.lock'))}</button><button class="btn sec" type="button" data-vt="change">${esc(t('vt.change'))}</button><button class="btn sec" type="button" data-vt="import">${esc(t('vt.import'))}</button><input type="file" id="vault-import" accept=".json,application/json" hidden></div>`;

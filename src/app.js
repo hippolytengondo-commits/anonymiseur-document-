@@ -480,7 +480,10 @@ function refreshMapChoices() {
     if (vaultOpen()) for (const m of vaultList()) opts.push({ v: 'vault:' + m.id, t: t('rs.vaultItem', { doc: mapDocName(m), date: new Date(m.created).toLocaleString(locale()) }) });
     else locked = true;
   }
+  const legacy = legacyTables();
+  for (const m of legacy) opts.push({ v: 'legacy:' + m.id, t: t('rs.legacyItem', { doc: m.document || t('doc.generic'), date: m.created ? new Date(m.created).toLocaleString(locale()) : '' }) });
   let html = opts.map((o, i) => `<label class="radio"><input type="radio" name="mapsrc" value="${esc(o.v)}"${(sel ? sel === o.v : i === 0) ? ' checked' : ''}> <span>${esc(o.t)}</span></label>`).join('');
+  if (legacy.length) html += `<p class="hint">${esc(t('rs.legacyHint'))}</p>`;
   if (locked) html += `<div class="row"><span class="hint">${esc(t('rs.locked'))}</span><button type="button" class="btn sec" id="map-unlock">${esc(t('rs.unlock'))}</button></div>`;
   box.innerHTML = html || `<p class="hint" style="margin:0">${esc(t('rs.none'))}</p>`;
 }
@@ -501,6 +504,10 @@ async function getMapping() {
   const c = $('#map-choices input:checked');
   if (c) {
     if (c.value === 'session' && state.result) return state.result.mapping;
+    if (c.value.startsWith('legacy:')) {
+      const m = legacyTables().find(x => 'legacy:' + x.id === c.value);
+      if (m) return m;
+    }
     if (c.value.startsWith('vault:')) {
       if (!vaultOpen()) throw new Error(t('vt.needOpen'));
       const m = await vaultGet(c.value.slice(6));

@@ -313,6 +313,7 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
     <div class="chips" id="residual"></div>
     <h3 data-i18n="s4.dl"></h3>
     <div class="row" style="margin-top:4px" id="dl-box"></div>
+    <div class="notice"><div data-i18n="dl.mapWarn"></div></div>
     <h3><span data-i18n="s4.map"></span> <small style="font-weight:400;color:var(--muted)">— <span data-i18n="s4.mapHint"></span></small></h3>
     <div class="row" style="margin-top:4px">
       <button class="btn sec" id="save-map" type="button" data-i18n="s4.save"></button>
@@ -329,8 +330,13 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
   <h1 data-i18n="rs.title"></h1>
   <p class="lead" data-i18n="rs.sub"></p>
   <section class="card" id="s5">
+    <div class="notice info"><div><b data-i18n="rs.help.t"></b>
+      <ol style="margin:6px 0 0;padding-left:20px"><li data-i18n="rs.help.1"></li><li data-i18n="rs.help.2"></li><li data-i18n="rs.help.3"></li></ol>
+      <p style="margin:8px 0 0" data-i18n="rs.help.4"></p></div></div>
     <label class="lbl" style="margin-top:0" data-i18n="rs.table"></label>
     <div id="map-choices"></div>
+    <details style="margin-top:10px"><summary data-i18n="rs.lost.t"></summary>
+      <ul style="margin:8px 0 0;padding-left:20px"><li data-i18n="rs.lost.1"></li><li data-i18n="rs.lost.2"></li><li data-i18n="rs.lost.3"></li><li data-i18n="rs.lost.4"></li></ul></details>
     <label class="lbl" for="r-map" data-i18n="rs.file"></label>
     <input type="file" id="r-map" accept=".json,application/json">
     <label class="lbl" for="r-doc" data-i18n="rs.doc"></label>
