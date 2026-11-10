@@ -1,1 +1,8 @@
 dist/
+
+# Fichiers de test générés (données fictives, jamais versionnés)
+test/demo.docx
+test/demo.pdf
+test/anon.docx
+test/restored.docx
+_site/

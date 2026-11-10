@@ -13,15 +13,18 @@ const TYPES = {
   amount: { name: 'Montant', base: 'MONTANT', style: 'num' },
   date: { name: 'Date', base: 'DATE', style: 'num' }
 };
+/* Désignations anglaises (interface en anglais) */
+const TYPES_EN = { person: 'Person', org: 'Company', other: 'Item', email: 'EMAIL', phone: 'PHONE', id: 'ID', iban: 'ACCOUNT', url: 'LINK', amount: 'AMOUNT', date: 'DATE' };
 
 function letters(n) {
   let s = '';
   while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
   return s;
 }
-function formatLabel(type, n) {
+function formatLabel(type, n, lang) {
   const t = TYPES[type] || TYPES.other;
-  return t.style === 'letter' ? `${t.base} ${letters(n)}` : `[${t.base} ${n}]`;
+  const base = lang === 'en' ? (TYPES_EN[type] || TYPES_EN.other) : t.base;
+  return t.style === 'letter' ? `${base} ${letters(n)}` : `[${base} ${n}]`;
 }
 
 /* ---------- Archive ZIP (lecture / écriture) ---------- */
@@ -414,5 +417,5 @@ function buildDocxFromText(text) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { TYPES, letters, formatLabel, unzip, zip, docxPartsText, transformDocx, applyMatches, buildMatcher, detect, norm, residualWords, paragraphTexts, rewriteXml, buildDocxFromText };
+  module.exports = { TYPES, TYPES_EN, letters, formatLabel, unzip, zip, docxPartsText, transformDocx, applyMatches, buildMatcher, detect, norm, residualWords, paragraphTexts, rewriteXml, buildDocxFromText };
 }

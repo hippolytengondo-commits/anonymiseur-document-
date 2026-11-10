@@ -2,7 +2,7 @@
 const $ = (s, r) => (r || document).querySelector(s);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MIME = { docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', txt: 'text/plain;charset=utf-8', pdf: 'application/pdf' };
-const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null };
+const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null, histId: null, step: 1, restored: null };
 
 function say(id, text, cls) {
   const el = $(id);
@@ -10,7 +10,7 @@ function say(id, text, cls) {
   el.className = 'msg show ' + (cls || '');
   el.textContent = text;
 }
-function fmt(n) { return n.toLocaleString('fr-FR'); }
+function fmt(n) { return n.toLocaleString(locale()); }
 function safeName(n) { return (n || 'document').replace(/[^\p{L}\p{N}_\- ]/gu, '').trim().replace(/\s+/g, '_') || 'document'; }
 function baseName() { return safeName(state.name); }
 function extOf(f) { return (f.name.split('.').pop() || '').toLowerCase(); }
@@ -31,7 +31,7 @@ function loadPdfLib() {
     const s = document.createElement('script');
     s.src = blobUrl('#lib-pdflib');
     s.onload = res;
-    s.onerror = () => rej(new Error('Module de génération PDF indisponible.'));
+    s.onerror = () => rej(new Error(t('err.pdflib')));
     document.head.appendChild(s);
   });
 }
@@ -59,8 +59,8 @@ async function pdfToText(buf) {
     task = lib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false, disableFontFace: true, useSystemFonts: false, verbosity: 0 });
     pdf = await task.promise;
   } catch (e) {
-    if (e && e.name === 'PasswordException') throw new Error('Ce PDF est protégé par un mot de passe : retirez la protection avant de le charger.');
-    throw new Error('PDF illisible ou corrompu.');
+    if (e && e.name === 'PasswordException') throw new Error(t('err.pdfpw'));
+    throw new Error(t('err.pdfbad'));
   }
   const pages = [];
   for (let i = 1; i <= pdf.numPages; i++) {
@@ -126,9 +126,9 @@ function outputsOf(d) {
   const docxFn = async () => ({ data: d.kind === 'docx' ? d.bytes : buildDocxFromText(d.text), mime: MIME.docx });
   const pdfFn = async () => ({ data: await buildPdfFromText(d.text), mime: MIME.pdf });
   const txtFn = async () => ({ data: d.text.replace(/\f/g, '\n\n'), mime: MIME.txt });
-  if (d.kind === 'docx') L.push(['Document Word (.docx)', 'docx', docxFn, true]);
-  else if (d.kind === 'pdf') L.push(['Document PDF (.pdf)', 'pdf', pdfFn, true], ['Version Word (.docx)', 'docx', docxFn], ['Texte (.txt)', 'txt', txtFn]);
-  else L.push(['Texte (.txt)', 'txt', txtFn, true]);
+  if (d.kind === 'docx') L.push([t('dl.docx'), 'docx', docxFn, true]);
+  else if (d.kind === 'pdf') L.push([t('dl.pdf'), 'pdf', pdfFn, true], [t('dl.docxv'), 'docx', docxFn], [t('dl.txt'), 'txt', txtFn]);
+  else L.push([t('dl.txt'), 'txt', txtFn, true]);
   return L;
 }
 function renderDownloads(box, d, suffix, msgSel) {
@@ -138,8 +138,8 @@ function renderDownloads(box, d, suffix, msgSel) {
     b.type = 'button'; b.className = 'btn' + (primary ? '' : ' sec'); b.textContent = label;
     b.addEventListener('click', async () => {
       b.disabled = true;
-      try { const r = await fn(); download(`${d.name}${suffix}.${ext}`, r.data, r.mime); }
-      catch (e) { say(msgSel, 'Erreur : ' + (e.message || e), 'err'); }
+      try { const r = await fn(); download(`${d.name}${suffix}.${ext}`, r.data, r.mime); logActivity('export', { fmt: ext }); }
+      catch (e) { say(msgSel, t('err.generic', { m: e.message || e }), 'err'); }
       b.disabled = false;
     });
     box.appendChild(b);
@@ -147,40 +147,54 @@ function renderDownloads(box, d, suffix, msgSel) {
 }
 const previewHtml = t => t.replace(/\f/g, '\n\n— — —\n\n');
 
+/* ---- Étapes ---- */
+function setStep(n) {
+  state.step = n;
+  document.querySelectorAll('#steps li').forEach((li, i) => {
+    li.classList.toggle('done', i + 1 < n);
+    li.classList.toggle('cur', i + 1 === n);
+    if (i + 1 === n) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+  });
+}
+const typeName = k => t('type.' + (TYPES[k] ? k : 'other'));
+const typeBase = k => (labLang() === 'en' ? (TYPES_EN[k] || TYPES_EN.other) : (TYPES[k] || TYPES.other).base);
+const docLabel = () => (prefs.keepNames ? state.name : t('doc.generic'));
+
 /* ---- 1. Chargement ---- */
 function resetAnalysis() {
-  state.items = []; state.result = null;
+  state.items = []; state.result = null; state.histId = null;
   $('#s3').hidden = true; $('#s4').hidden = true;
   say('#m2', ''); say('#m3', '');
+  setStep(1);
 }
 async function onFile(file) {
   if (!file) return;
   resetAnalysis();
   const ext = extOf(file);
   try {
-    say('#m1', 'Lecture du document…', 'ok');
-    if (ext === 'doc') throw new Error("L'ancien format .doc n'est pas pris en charge. Enregistrez le document au format .docx ou PDF.");
+    say('#m1', t('msg.reading'), 'ok busy');
+    if (ext === 'doc') throw new Error(t('err.doc'));
     let pagesInfo = '';
     if (ext === 'pdf') {
       const r = await pdfToText(await file.arrayBuffer());
-      if (r.text.replace(/\s/g, '').length < 20 * r.pages)
-        throw new Error("Ce PDF ne contient pas de texte exploitable : il s'agit probablement d'un document numérisé (image). La reconnaissance de caractères (OCR) n'est pas disponible dans cette version.");
+      if (r.text.replace(/\s/g, '').length < 20 * r.pages) throw new Error(t('err.scan'));
       state.kind = 'pdf'; state.zip = null; state.text = r.text; state.media = 0;
-      pagesInfo = `${r.pages} page(s), `;
+      pagesInfo = t('pages.n', { n: r.pages });
     } else if (ext === 'docx') {
       const ents = await unzip(await file.arrayBuffer());
-      if (!ents.some(e => e.name === 'word/document.xml')) throw new Error('Document Word invalide.');
+      if (!ents.some(e => e.name === 'word/document.xml')) throw new Error(t('err.docx'));
       state.kind = 'docx'; state.zip = ents; state.text = docxPartsText(ents);
       state.media = ents.filter(e => /^word\/media\//.test(e.name)).length;
     } else if (['txt', 'md', 'csv'].includes(ext)) {
       state.kind = 'txt'; state.zip = null; state.text = await file.text(); state.media = 0;
-    } else throw new Error('Format non pris en charge. Utilisez un fichier PDF, .docx ou .txt.');
+    } else throw new Error(t('err.format'));
     state.name = file.name.replace(/\.[^.]+$/, '');
-    let info = `« ${file.name} » chargé — ${pagesInfo}${fmt(state.text.length)} caractères.`;
+    let info = t('msg.loaded', { file: file.name, pages: pagesInfo, chars: fmt(state.text.length) });
     let cls = 'ok';
-    if (state.media) { info += ` Attention : ${state.media} image(s) intégrée(s) ; leur contenu n'est pas anonymisé.`; cls = 'warn'; }
-    if (!state.text.trim()) { info = 'Aucun texte exploitable trouvé dans ce document.'; cls = 'err'; state.kind = null; }
+    if (state.media) { info += ' ' + t('msg.media', { n: state.media }); cls = 'warn'; }
+    if (!state.text.trim()) { info = t('msg.empty'); cls = 'err'; state.kind = null; }
     say('#m1', info, cls);
+    if (state.kind) { setStep(2); logActivity('import', { kind: state.kind }); }
   } catch (e) {
     state.kind = null;
     say('#m1', e.message || String(e), 'err');
@@ -188,11 +202,12 @@ async function onFile(file) {
 }
 $('#file').addEventListener('change', e => onFile(e.target.files[0]));
 $('#use-paste').addEventListener('click', () => {
-  const t = $('#paste').value;
-  if (!t.trim()) return say('#m1', 'Aucun texte à utiliser.', 'err');
+  const txt = $('#paste').value;
+  if (!txt.trim()) return say('#m1', t('msg.nopaste'), 'err');
   resetAnalysis();
-  state.kind = 'txt'; state.zip = null; state.text = t; state.name = 'texte'; state.media = 0;
-  say('#m1', `Texte chargé — ${fmt(t.length)} caractères.`, 'ok');
+  state.kind = 'txt'; state.zip = null; state.text = txt; state.name = t('name.text'); state.media = 0;
+  say('#m1', t('msg.pasted', { chars: fmt(txt.length) }), 'ok');
+  setStep(2); logActivity('paste');
 });
 
 /* ---- 2. Analyse ---- */
@@ -205,7 +220,7 @@ function mkItem(type, variants, source, conf) {
 function parseVariants(s) { return s.split('|').map(x => x.trim()).filter(Boolean); }
 
 function analyze() {
-  if (!state.kind || !state.text.trim()) return say('#m2', "Veuillez d'abord charger un document (étape 1).", 'err');
+  if (!state.kind || !state.text.trim()) return say('#m2', t('err.needDoc'), 'err');
   say('#m2', '');
   const manual = [];
   for (const [sel, type] of [['#m-org', 'org'], ['#m-person', 'person'], ['#m-other', 'other']]) {
@@ -232,7 +247,8 @@ function analyze() {
   renderItems();
   $('#s3').hidden = false;
   const found = state.items.filter(i => i.count > 0).length;
-  say('#m2', state.items.length ? `${state.items.length} élément(s) à contrôler (${found} trouvé(s) dans le document).` : "Aucun élément détecté. Saisissez-les manuellement ci-dessus, ou ajoutez-en à l'étape 3.", state.items.length ? 'ok' : 'warn');
+  say('#m2', state.items.length ? t('msg.found', { n: state.items.length, f: found }) : t('msg.nofound'), state.items.length ? 'ok' : 'warn');
+  setStep(3); logActivity('analyze', { n: state.items.length });
   $('#s3').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 $('#analyze').addEventListener('click', analyze);
@@ -251,28 +267,28 @@ function computeStats() {
   for (const it of active) {
     if (it.custom) continue;
     cnt[it.type] = (cnt[it.type] || 0) + 1;
-    it.auto = formatLabel(it.type, cnt[it.type]);
+    it.auto = formatLabel(it.type, cnt[it.type], labLang());
   }
-  for (const it of state.items) if (!it.include && !it.auto) it.auto = (TYPES[it.type] || TYPES.other).base;
+  for (const it of state.items) if (!it.include && !it.auto) it.auto = typeBase(it.type);
 }
-function countText(it) { return it.count ? `${it.count} occurrence${it.count > 1 ? 's' : ''}` : 'non trouvé'; }
+function countText(it) { return it.count ? t(it.count > 1 ? 'occ.many' : 'occ.one', { n: it.count }) : t('occ.none'); }
 
 function renderItems() {
-  const typeOpts = k => Object.entries(TYPES).map(([t, v]) => `<option value="${t}"${t === k ? ' selected' : ''}>${esc(v.name)}</option>`).join('');
+  const typeOpts = k => Object.keys(TYPES).map(tp => `<option value="${tp}"${tp === k ? ' selected' : ''}>${esc(typeName(tp))}</option>`).join('');
   $('#items').innerHTML = state.items.map(it => `
 <div class="item${it.include ? '' : ' off'}" data-id="${it.id}">
   <div class="item-top">
-    <input type="checkbox" class="f-inc" aria-label="Masquer cet élément"${it.include ? ' checked' : ''}>
-    <select class="f-type" aria-label="Type">${typeOpts(it.type)}</select>
-    <span class="badge cnt">${countText(it)}</span>
-    ${it.conf === 'medium' ? '<span class="badge warn">À vérifier</span>' : ''}
-    <button class="x f-del" type="button" title="Supprimer" aria-label="Supprimer">×</button>
+    <input type="checkbox" class="f-inc" aria-label="${esc(t('it.inc'))}"${it.include ? ' checked' : ''}>
+    <select class="f-type" aria-label="${esc(t('it.type'))}">${typeOpts(it.type)}</select>
+    <span class="badge cnt">${esc(countText(it))}</span>
+    ${it.conf === 'medium' ? `<span class="badge warn">${esc(t('it.verify'))}</span>` : ''}
+    <button class="x f-del" type="button" title="${esc(t('it.del'))}" aria-label="${esc(t('it.del'))}">×</button>
   </div>
-  <div><label class="lbl">Texte à masquer <small>(variantes séparées par « | »)</small></label>
+  <div><label class="lbl">${esc(t('it.txt'))} <small>${esc(t('it.txtHint'))}</small></label>
   <input type="text" class="f-var" value="${esc(it.variants.join(' | '))}"></div>
-  <div><label class="lbl">Remplacer par</label>
+  <div><label class="lbl">${esc(t('it.repl'))}</label>
   <input type="text" class="f-lab" value="${esc(it.custom)}" placeholder="${esc(it.auto)}"></div>
-</div>`).join('') || '<p class="hint">Aucun élément. Utilisez le formulaire ci-dessous pour en ajouter.</p>';
+</div>`).join('') || `<p class="hint">${esc(t('it.none'))}</p>`;
 }
 function refreshDom() {
   for (const card of document.querySelectorAll('#items .item')) {
@@ -307,7 +323,11 @@ $('#items').addEventListener('click', e => {
   computeStats(); renderItems();
 });
 
-$('#add-type').innerHTML = Object.entries(TYPES).map(([k, v]) => `<option value="${k}"${k === 'other' ? ' selected' : ''}>${esc(v.name)}</option>`).join('');
+function renderTypeSelect() {
+  const cur = $('#add-type').value || 'other';
+  $('#add-type').innerHTML = Object.keys(TYPES).map(k => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(typeName(k))}</option>`).join('');
+}
+renderTypeSelect();
 function addItem(type, variants) {
   const it = mkItem(type, variants, 'manuel', 'high');
   state.items.push(it);
@@ -321,7 +341,7 @@ $('#add-btn').addEventListener('click', () => {
   $('#add-var').value = '';
 });
 
-/* ---- 4. Anonymisation ---- */
+/* ---- 4. Remplacement, aperçu et export ---- */
 function highlight(text, labels) {
   const m = buildMatcher([{ variants: labels, repl: 1 }]).fn(text);
   let out = '', pos = 0;
@@ -336,13 +356,32 @@ function buildMapping(active) {
     if (!e) { e = { label, type: it.type, values: [] }; g.set(label, e); }
     for (const v of it.variants) if (!e.values.some(x => norm(x) === norm(v))) e.values.push(v);
   }
-  return { format: 'anonymiseur-v1', id: 'm' + Date.now().toString(36), created: new Date().toISOString(), document: state.name, entries: [...g.values()] };
+  return { format: 'anonymiseur-v1', id: 'm' + Date.now().toString(36), created: new Date().toISOString(), document: docLabel(), entries: [...g.values()] };
+}
+function renderResult() {
+  const r = state.result;
+  if (!r) return;
+  const { d, mapping, total, left } = r;
+  $('#stats').innerHTML =
+    `<div class="stat"><b>${fmt(total)}</b>${esc(t('stat.repl'))}</div>` +
+    `<div class="stat"><b>${mapping.entries.length}</b>${esc(t('stat.names'))}</div>` +
+    `<div class="stat"><b style="color:${left ? 'var(--bad)' : 'var(--ok)'}">${left}</b>${esc(t('stat.left'))}</div>`;
+  const labels = mapping.entries.map(e => e.label);
+  const shown = previewHtml(d.text).slice(0, 8000);
+  $('#preview').innerHTML = highlight(shown, labels) + (d.text.length > 8000 ? '\n\n' + esc(t('s4.prevMore')) : '');
+  const labelWords = new Set(labels.flatMap(l => l.toLowerCase().split(/[\s\[\]\d]+/)).filter(Boolean));
+  const res = residualWords(d.text, labelWords, 40);
+  $('#residual').innerHTML = res.length
+    ? res.map(x => `<button type="button" class="chip" data-w="${esc(x.word)}">${esc(x.word)}<i>×${x.total}</i></button>`).join('')
+    : `<span class="hint">${esc(t('s4.noRes'))}</span>`;
+  renderDownloads($('#dl-box'), d, t('suffix.anon'), '#m4');
+  $('#s4').hidden = false;
 }
 function run() {
   try {
     computeStats();
     const active = state.items.filter(i => i.include && i.variants.length);
-    if (!active.length) { say('#m3', 'Aucun élément sélectionné.', 'err'); return false; }
+    if (!active.length) { say('#m3', t('err.nosel'), 'err'); return false; }
     const matcher = buildMatcher(active.map(i => ({ variants: i.variants, repl: i.custom || i.auto })));
     const total = matcher.fn(state.text).length;
     let d;
@@ -355,27 +394,17 @@ function run() {
     d.name = baseName();
     const left = buildMatcher(active.map(i => ({ variants: i.variants, repl: 1 }))).fn(d.text).length;
     const mapping = buildMapping(active);
-    state.result = { d, mapping };
-
-    $('#stats').innerHTML =
-      `<div class="stat"><b>${fmt(total)}</b>remplacements</div>` +
-      `<div class="stat"><b>${mapping.entries.length}</b>désignations</div>` +
-      `<div class="stat"><b style="color:${left ? 'var(--bad)' : 'var(--ok)'}">${left}</b>occurrence(s) résiduelle(s)</div>`;
-    const labels = mapping.entries.map(e => e.label);
-    const shown = previewHtml(d.text).slice(0, 8000);
-    $('#preview').innerHTML = highlight(shown, labels) + (d.text.length > 8000 ? '\n\n… (aperçu limité aux premiers caractères)' : '');
-    const labelWords = new Set(labels.flatMap(l => l.toLowerCase().split(/[\s\[\]\d]+/)).filter(Boolean));
-    const res = residualWords(d.text, labelWords, 40);
-    $('#residual').innerHTML = res.length
-      ? res.map(r => `<button type="button" class="chip" data-w="${esc(r.word)}">${esc(r.word)}<i>×${r.total}</i></button>`).join('')
-      : '<span class="hint">Aucun mot à majuscule suspect.</span>';
-    renderDownloads($('#dl-box'), d, '_anonymise', '#m4');
+    state.result = { d, mapping, total, left };
+    renderResult();
     say('#m4', '');
-    $('#s4').hidden = false;
     say('#m3', '');
     refreshMapChoices();
+    setStep(4);
+    if (!state.histId) state.histId = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    histUpsert({ id: state.histId, ts: Date.now(), name: prefs.keepNames ? state.name : '', kind: state.kind, replacements: total, designations: mapping.entries.length, residual: left });
+    logActivity('apply', { r: total, n: mapping.entries.length });
     return true;
-  } catch (e) { say('#m3', 'Erreur : ' + (e.message || e), 'err'); return false; }
+  } catch (e) { say('#m3', t('err.generic', { m: e.message || e }), 'err'); return false; }
 }
 $('#run').addEventListener('click', () => { if (run()) $('#s4').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 $('#residual').addEventListener('click', e => {
@@ -384,44 +413,63 @@ $('#residual').addEventListener('click', e => {
   addItem('other', [b.dataset.w]);
   run();
 });
-$('#dl-json').addEventListener('click', () => state.result && download(`${baseName()}_correspondances.json`, JSON.stringify(state.result.mapping, null, 2), 'application/json'));
-$('#dl-csv').addEventListener('click', () => {
-  if (!state.result) return;
-  const q = s => '"' + String(s).replace(/"/g, '""') + '"';
-  const rows = [['Désignation', 'Type', "Valeurs d'origine"].map(q).join(';')];
-  for (const e of state.result.mapping.entries) rows.push([e.label, (TYPES[e.type] || TYPES.other).name, e.values.join(' | ')].map(q).join(';'));
-  download(`${baseName()}_correspondances.csv`, '﻿' + rows.join('\r\n'), 'text/csv;charset=utf-8');
-});
 
-/* ---- Tables mémorisées (facultatif, navigateur uniquement) ---- */
-const STORE_KEY = 'anonymiseur_tables_v1';
-function loadSaved() { try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch (e) { return []; } }
-function writeSaved(list) { localStorage.setItem(STORE_KEY, JSON.stringify(list)); }
-$('#save-map').addEventListener('click', () => {
+/* ---- Tables de correspondance : export ---- */
+function mapJson(mapping) { return JSON.stringify(mapping, null, 2); }
+function mapCsv(mapping) {
+  const rows = [[t('csv.label'), t('csv.type'), t('csv.vals')].map(csvCell).join(';')];
+  for (const e of mapping.entries) rows.push([e.label, typeName(e.type), (e.values || []).join(' | ')].map(csvCell).join(';'));
+  return '﻿' + rows.join('\r\n');
+}
+function exportMap(mapping, fmt, base) {
+  const name = `${safeName(base)}${t('suffix.map')}`;
+  if (fmt === 'json') download(name + '.json', mapJson(mapping), 'application/json');
+  else download(name + '.csv', mapCsv(mapping), 'text/csv;charset=utf-8');
+  logActivity('exportmap', { fmt });
+}
+$('#dl-json').addEventListener('click', () => state.result && exportMap(state.result.mapping, 'json', state.name));
+$('#dl-csv').addEventListener('click', () => state.result && exportMap(state.result.mapping, 'csv', state.name));
+
+/* ---- Coffre chiffré : enregistrement et sélection ---- */
+function vaultErr(e) {
+  const m = e && e.message;
+  if (m === 'crypto') return t('vt.crypto');
+  if (m === 'storage') return t('vt.storage');
+  if (m === 'locked') return t('vt.needOpen');
+  return t('err.generic', { m: m || e });
+}
+function mapDocName(m) {
+  const h = histAll().find(x => x.mapId === m.id);
+  return (h && h.name) || m.label || t('docs.untitled', { date: new Date(m.created).toLocaleDateString(locale()) });
+}
+$('#save-map').addEventListener('click', async () => {
   if (!state.result) return;
   try {
-    const list = loadSaved().filter(m => m.document !== state.result.mapping.document);
-    list.unshift(state.result.mapping);
-    writeSaved(list.slice(0, 30));
-    say('#m4', 'Table mémorisée sur cet appareil. Elle sera proposée à l\'étape 5. Conservez tout de même le fichier .json.', 'ok');
+    if (!(await ensureVaultOpen())) return;
+    await vaultAdd(state.result.mapping);
+    histUpsert({ id: state.histId, mapId: state.result.mapping.id });
+    say('#m4', t('vt.saved'), 'ok');
     refreshMapChoices();
-  } catch (e) { say('#m4', "Impossible de mémoriser ici (stockage du navigateur indisponible). Utilisez le fichier .json.", 'err'); }
+  } catch (e) { say('#m4', vaultErr(e), 'err'); }
 });
 function refreshMapChoices() {
   const box = $('#map-choices');
-  const sel = (box.querySelector('input:checked') || {}).value;
+  const sel = (box.querySelector('input:checked') || {}).value || window.pendingMap;
   const opts = [];
-  if (state.result) opts.push({ v: 'session', t: `Session en cours — ${state.result.mapping.document} (${state.result.mapping.entries.length} désignations)` });
-  for (const m of loadSaved()) opts.push({ v: 'saved:' + m.id, t: `Mémorisée — ${m.document} (${new Date(m.created).toLocaleString('fr-FR')})`, del: m.id });
-  if (!opts.length) { box.innerHTML = '<p class="hint" style="margin:0">Aucune table disponible sur cet appareil : chargez le fichier .json ci-dessous.</p>'; return; }
-  box.innerHTML = opts.map((o, i) => `<div style="display:flex;gap:8px;align-items:center;margin:4px 0"><label style="flex:1;font-size:14px;display:flex;gap:8px;align-items:center"><input type="radio" name="mapsrc" value="${esc(o.v)}"${(sel ? sel === o.v : i === 0) ? ' checked' : ''}> ${esc(o.t)}</label>${o.del ? `<button type="button" class="x" data-del="${esc(o.del)}" title="Supprimer cette table">×</button>` : ''}</div>`).join('');
+  if (state.result) opts.push({ v: 'session', t: t('rs.session', { doc: state.result.mapping.document, n: state.result.mapping.entries.length }) });
+  let locked = false;
+  if (vaultExists()) {
+    if (vaultOpen()) for (const m of vaultList()) opts.push({ v: 'vault:' + m.id, t: t('rs.vaultItem', { doc: mapDocName(m), date: new Date(m.created).toLocaleString(locale()) }) });
+    else locked = true;
+  }
+  let html = opts.map((o, i) => `<label class="radio"><input type="radio" name="mapsrc" value="${esc(o.v)}"${(sel ? sel === o.v : i === 0) ? ' checked' : ''}> <span>${esc(o.t)}</span></label>`).join('');
+  if (locked) html += `<div class="row"><span class="hint">${esc(t('rs.locked'))}</span><button type="button" class="btn sec" id="map-unlock">${esc(t('rs.unlock'))}</button></div>`;
+  box.innerHTML = html || `<p class="hint" style="margin:0">${esc(t('rs.none'))}</p>`;
 }
-$('#map-choices').addEventListener('click', e => {
-  const id = e.target.dataset && e.target.dataset.del;
-  if (!id) return;
-  try { writeSaved(loadSaved().filter(m => m.id !== id)); } catch (err) { /* ignore */ }
-  refreshMapChoices();
+$('#map-choices').addEventListener('click', async e => {
+  if (e.target.id === 'map-unlock') { await ensureVaultOpen(); refreshMapChoices(); }
 });
+onVaultChange(() => refreshMapChoices());
 refreshMapChoices();
 
 /* ---- 5. Restauration ---- */
@@ -429,51 +477,59 @@ async function getMapping() {
   const f = $('#r-map').files[0];
   if (f) {
     const map = JSON.parse(await f.text());
-    if (!map || !Array.isArray(map.entries)) throw new Error('Table de correspondance invalide.');
+    if (!map || !Array.isArray(map.entries)) throw new Error(t('err.maptype'));
     return map;
   }
   const c = $('#map-choices input:checked');
   if (c) {
-    if (c.value === 'session') return state.result.mapping;
-    const m = loadSaved().find(x => 'saved:' + x.id === c.value);
-    if (m) return m;
+    if (c.value === 'session' && state.result) return state.result.mapping;
+    if (c.value.startsWith('vault:')) {
+      if (!vaultOpen()) throw new Error(t('vt.needOpen'));
+      const m = await vaultGet(c.value.slice(6));
+      if (m) return m;
+    }
   }
-  throw new Error('Sélectionnez ou chargez une table de correspondance.');
+  throw new Error(t('err.nomap'));
 }
 $('#r-run').addEventListener('click', async () => {
   try {
-    say('#m5', 'Restauration en cours…', 'ok');
+    say('#m5', t('msg.restoring'), 'ok busy');
     const map = await getMapping();
     const matcher = buildMatcher(map.entries.filter(e => e.values && e.values.length).map(e => ({ variants: [e.label], repl: e.values[0] })));
     const f = $('#r-doc').files[0], pasted = $('#r-paste').value;
-    let d;
+    let d, srcText;
     if (f) {
       const ext = extOf(f), base = safeName(f.name.replace(/\.[^.]+$/, ''));
       if (ext === 'docx') {
-        const ents = transformDocx(await unzip(await f.arrayBuffer()), matcher.fn, {});
+        const src = await unzip(await f.arrayBuffer());
+        srcText = docxPartsText(src);
+        const ents = transformDocx(src, matcher.fn, {});
         d = { kind: 'docx', name: base, bytes: zip(ents), text: docxPartsText(ents) };
       } else if (ext === 'pdf') {
         const r = await pdfToText(await f.arrayBuffer());
+        srcText = r.text;
         d = { kind: 'pdf', name: base, text: applyMatches(r.text, matcher.fn(r.text)) };
       } else if (['txt', 'md'].includes(ext)) {
-        const t = await f.text();
-        d = { kind: 'txt', name: base, text: applyMatches(t, matcher.fn(t)) };
-      } else throw new Error('Format non pris en charge (.pdf, .docx ou .txt).');
+        srcText = await f.text();
+        d = { kind: 'txt', name: base, text: applyMatches(srcText, matcher.fn(srcText)) };
+      } else throw new Error(t('err.rfmt'));
     } else if (pasted.trim()) {
-      d = { kind: 'txt', name: 'texte', text: applyMatches(pasted, matcher.fn(pasted)) };
-    } else throw new Error('Chargez un document ou collez un texte à restaurer.');
-    const n = matcher.fn(f ? (d.kind === 'docx' ? docxPartsText(await unzip(await f.arrayBuffer())) : (d.kind === 'pdf' ? (await pdfToText(await f.arrayBuffer())).text : await f.text())) : pasted).length;
-    $('#r-preview').textContent = previewHtml(d.text).slice(0, 8000) + (d.text.length > 8000 ? '\n\n… (aperçu limité aux premiers caractères)' : '');
+      srcText = pasted;
+      d = { kind: 'txt', name: t('name.text'), text: applyMatches(pasted, matcher.fn(pasted)) };
+    } else throw new Error(t('err.rnone'));
+    const n = matcher.fn(srcText).length;
+    $('#r-preview').textContent = previewHtml(d.text).slice(0, 8000) + (d.text.length > 8000 ? '\n\n' + t('s4.prevMore') : '');
     $('#r-out').hidden = false;
     state.restored = d;
-    renderDownloads($('#r-dl'), d, '_restaure', '#m5');
-    say('#m5', n ? `${n} désignation(s) remplacée(s) par les valeurs d'origine.` : "Aucune désignation de la table n'a été retrouvée dans ce document.", n ? 'ok' : 'warn');
-  } catch (e) { say('#m5', 'Erreur : ' + (e.message || e), 'err'); }
+    renderDownloads($('#r-dl'), d, t('suffix.rest'), '#m5');
+    say('#m5', n ? t('msg.restored', { n }) : t('msg.restnone'), n ? 'ok' : 'warn');
+    logActivity('restore', { n });
+  } catch (e) { say('#m5', t('err.generic', { m: e.message || e }), 'err'); }
 });
 $('#r-copy').addEventListener('click', async () => {
   if (!state.restored) return;
-  try { await navigator.clipboard.writeText(state.restored.text.replace(/\f/g, '\n\n')); say('#m5', 'Texte copié.', 'ok'); }
-  catch (e) { say('#m5', 'Copie impossible : sélectionnez le texte manuellement.', 'warn'); }
+  try { await navigator.clipboard.writeText(state.restored.text.replace(/\f/g, '\n\n')); say('#m5', t('rs.copied'), 'ok'); }
+  catch (e) { say('#m5', t('err.copy'), 'warn'); }
 });
 
 // Installation (PWA) : uniquement en HTTPS ou en local ; sans effet à l'ouverture directe du fichier.

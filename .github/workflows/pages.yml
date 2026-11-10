@@ -1,28 +1,61 @@
-name: Déploiement GitHub Pages
+name: Tests et déploiement GitHub Pages
 on:
   push:
+    branches: [main, 'claude/**']
+  pull_request:
     branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  deploy:
+  tests:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Construction reproductible (index.html, manifeste et service worker à jour)
+        run: |
+          node build.js
+          git diff --exit-code -- index.html manifest.webmanifest sw.js
+      - name: Tests unitaires et moteur
+        run: |
+          pip install --quiet python-docx reportlab playwright
+          python test/make_docx.py
+          python test/make_pdf.py
+          node test/unit.js
+          node test/run.js > /dev/null
+      - name: Tests d'interface (Chrome)
+        env:
+          CHROME: /usr/bin/google-chrome
+        run: |
+          python test/ui2.py
+          python test/ui3.py
+  deploy:
+    needs: tests
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
+      - name: Préparer les seuls fichiers publiés
+        run: |
+          mkdir _site
+          cp index.html manifest.webmanifest sw.js _site/
+          touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
