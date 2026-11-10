@@ -6,6 +6,7 @@ node build.js
 python3 test/make_docx.py
 python3 test/make_pdf.py
 node test/unit.js
+node test/intl.js
 node test/run.js > /dev/null
 python3 test/ui2.py
 python3 test/ui3.py

@@ -28,6 +28,7 @@ jobs:
           python test/make_docx.py
           python test/make_pdf.py
           node test/unit.js
+          node test/intl.js
           node test/run.js > /dev/null
       - name: Tests d'interface (Chrome)
         env:

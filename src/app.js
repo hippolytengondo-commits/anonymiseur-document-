@@ -2,7 +2,7 @@
 const $ = (s, r) => (r || document).querySelector(s);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MIME = { docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', txt: 'text/plain;charset=utf-8', pdf: 'application/pdf' };
-const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null, histId: null, step: 1, restored: null };
+const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null, histId: null, step: 1, restored: null, langs: [] };
 
 function say(id, text, cls) {
   const el = $(id);
@@ -121,18 +121,23 @@ function download(name, data, mime) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
 }
 /* d = { kind: 'docx'|'pdf'|'txt', text, bytes (docx) } */
+const NON_LATIN = /[\u0400-\u04FF\u3000-\u9FFF\uAC00-\uD7AF\uFF00-\uFFEF]/;
 function outputsOf(d) {
   const L = [];
   const docxFn = async () => ({ data: d.kind === 'docx' ? d.bytes : buildDocxFromText(d.text), mime: MIME.docx });
   const pdfFn = async () => ({ data: await buildPdfFromText(d.text), mime: MIME.pdf });
   const txtFn = async () => ({ data: d.text.replace(/\f/g, '\n\n'), mime: MIME.txt });
   if (d.kind === 'docx') L.push([t('dl.docx'), 'docx', docxFn, true]);
-  else if (d.kind === 'pdf') L.push([t('dl.pdf'), 'pdf', pdfFn, true], [t('dl.docxv'), 'docx', docxFn], [t('dl.txt'), 'txt', txtFn]);
+  else if (d.kind === 'pdf') {
+    if (NON_LATIN.test(d.text)) L.push([t('dl.docxv'), 'docx', docxFn, true], [t('dl.txt'), 'txt', txtFn], [t('dl.pdf'), 'pdf', pdfFn]);
+    else L.push([t('dl.pdf'), 'pdf', pdfFn, true], [t('dl.docxv'), 'docx', docxFn], [t('dl.txt'), 'txt', txtFn]);
+  }
   else L.push([t('dl.txt'), 'txt', txtFn, true]);
   return L;
 }
 function renderDownloads(box, d, suffix, msgSel) {
   box.innerHTML = '';
+  if (d.kind === 'pdf' && NON_LATIN.test(d.text) && msgSel) say(msgSel, t('dl.pdfWarn'), 'warn');
   for (const [label, ext, fn, primary] of outputsOf(d)) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'btn' + (primary ? '' : ' sec'); b.textContent = label;
@@ -157,12 +162,22 @@ function setStep(n) {
   });
 }
 const typeName = k => t('type.' + (TYPES[k] ? k : 'other'));
-const typeBase = k => (labLang() === 'en' ? (TYPES_EN[k] || TYPES_EN.other) : (TYPES[k] || TYPES.other).base);
+const typeBase = k => { const L = TYPES_L[labLang()]; return L ? (L[k] || L.other) : (TYPES[k] || TYPES.other).base; };
+function docLangs() { const v = $('#doc-lang').value; return v === 'auto' ? state.langs : [v]; }
+function showLang() {
+  const el = $('#lang-info');
+  if (!state.kind) { el.textContent = ''; return; }
+  const L = docLangs();
+  const names = L.map(x => t('lg.' + x)).join(', ');
+  el.textContent = L.length ? t($('#doc-lang').value === 'auto' ? 'dl.detected' : 'dl.chosen', { l: names }) : t('dl.unknown');
+}
+$('#doc-lang').addEventListener('change', showLang);
 const docLabel = () => (prefs.keepNames ? state.name : t('doc.generic'));
 
 /* ---- 1. Chargement ---- */
 function resetAnalysis() {
-  state.items = []; state.result = null; state.histId = null;
+  state.items = []; state.result = null; state.histId = null; state.langs = [];
+  $('#lang-info').textContent = '';
   $('#s3').hidden = true; $('#s4').hidden = true;
   say('#m2', ''); say('#m3', '');
   setStep(1);
@@ -194,7 +209,7 @@ async function onFile(file) {
     if (state.media) { info += ' ' + t('msg.media', { n: state.media }); cls = 'warn'; }
     if (!state.text.trim()) { info = t('msg.empty'); cls = 'err'; state.kind = null; }
     say('#m1', info, cls);
-    if (state.kind) { setStep(2); logActivity('import', { kind: state.kind }); }
+    if (state.kind) { state.langs = detectLanguages(state.text); showLang(); setStep(2); logActivity('import', { kind: state.kind }); }
   } catch (e) {
     state.kind = null;
     say('#m1', e.message || String(e), 'err');
@@ -207,6 +222,7 @@ $('#use-paste').addEventListener('click', () => {
   resetAnalysis();
   state.kind = 'txt'; state.zip = null; state.text = txt; state.name = t('name.text'); state.media = 0;
   say('#m1', t('msg.pasted', { chars: fmt(txt.length) }), 'ok');
+  state.langs = detectLanguages(txt); showLang();
   setStep(2); logActivity('paste');
 });
 
@@ -235,6 +251,7 @@ function analyze() {
     id: $('#o-id').checked, iban: $('#o-iban').checked, url: $('#o-url').checked, amount: $('#o-amount').checked, date: $('#o-date').checked
   };
   const order = Object.keys(TYPES);
+  opt.langs = docLangs();
   const auto = detect(state.text, opt)
     .map(e => ({ ...e, variants: e.variants.filter(v => !manualKeys.has(norm(v))) }))
     .filter(e => e.variants.length)

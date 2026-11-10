@@ -254,11 +254,15 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
       <div class="row"><button class="btn sec" id="use-paste" type="button" data-i18n="s1.use"></button></div>
     </details>
     <div class="msg" id="m1" role="status"></div>
+    <p class="hint" id="lang-info" role="status"></p>
   </section>
 
   <section class="card" id="s2">
     <h2 data-i18n="s2.title"></h2>
     <p class="hint" style="margin-top:0" data-i18n-html="s2.hint"></p>
+    <label class="lbl" for="doc-lang" data-i18n="dl.label"></label>
+    <select id="doc-lang"><option value="auto" data-i18n="dl.auto"></option><option value="fr" data-i18n="lg.fr"></option><option value="en" data-i18n="lg.en"></option><option value="es" data-i18n="lg.es"></option><option value="pt" data-i18n="lg.pt"></option><option value="de" data-i18n="lg.de"></option><option value="ru" data-i18n="lg.ru"></option><option value="zh" data-i18n="lg.zh"></option></select>
+    <p class="hint" data-i18n="dl.hint"></p>
     <label class="lbl" for="m-org" data-i18n="s2.org"></label>
     <textarea id="m-org" placeholder="Alpha Conseil SARL | Alpha Conseil&#10;Beta Industries"></textarea>
     <label class="lbl" for="m-person" data-i18n="s2.person"></label>
@@ -408,7 +412,7 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
     <label class="lbl" for="pf-lang" data-i18n="pf.lang"></label>
     <select id="pf-lang"><option value="fr">Français</option><option value="en">English</option></select>
     <label class="lbl" for="pf-labels" data-i18n="pf.labels"></label>
-    <select id="pf-labels"><option value="auto" data-i18n="pf.auto"></option><option value="fr">Français (Personne A)</option><option value="en">English (Person A)</option></select>
+    <select id="pf-labels"><option value="auto" data-i18n="pf.auto"></option><option value="doc" data-i18n="pf.doc"></option><option value="fr">Français (Personne A)</option><option value="en">English (Person A)</option><option value="es">Español (Persona A)</option><option value="pt">Português (Pessoa A)</option><option value="de">Deutsch (Person A)</option><option value="ru">Русский (Лицо A)</option><option value="zh">中文 (【人员A】)</option></select>
     <p class="hint" data-i18n="pf.labelsH"></p>
     <div class="row"><button class="btn sec" id="pwa-install" type="button" hidden data-i18n="pwa.install"></button></div>
     <div class="msg" id="m-pf" role="status"></div>

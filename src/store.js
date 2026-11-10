@@ -12,7 +12,12 @@ const PREF_DEFAULTS = { lang: '', name: '', history: true, keepNames: false, loc
 let prefs = Object.assign({}, PREF_DEFAULTS, lsGet(KEYS.prefs, {}));
 if (prefs.lang !== 'fr' && prefs.lang !== 'en') prefs.lang = String(navigator.language || 'fr').toLowerCase().startsWith('en') ? 'en' : 'fr';
 function setPref(k, v) { prefs[k] = v; lsSet(KEYS.prefs, prefs); }
-function labLang() { return prefs.labelLang === 'fr' || prefs.labelLang === 'en' ? prefs.labelLang : LANG; }
+function labLang() {
+  const p = prefs.labelLang;
+  if (LANGS.includes(p)) return p;
+  if (p === 'doc') { const d = (typeof state !== 'undefined' && state.langs || [])[0]; return LANGS.includes(d) ? d : LANG; }
+  return LANG;
+}
 
 /* ---- Historique des documents (métadonnées uniquement) ---- */
 function histAll() { const l = lsGet(KEYS.hist, []); return Array.isArray(l) ? l : []; }

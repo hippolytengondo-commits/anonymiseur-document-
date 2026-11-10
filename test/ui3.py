@@ -142,6 +142,38 @@ async def main():
         ls = await pg.evaluate("JSON.stringify(Object.entries(localStorage))")
         check("Alpha" not in ls, "table migrée chiffrée")
         await ctx.close()
+        # ---- H. Langues du document (fr, en, es, pt, de, ru, zh)
+        ctx, pg = await new_page(b, errs)
+        await pg.goto(URL)
+        LANGTXT = [
+            ("Espagnol", "El presente contrato se celebra entre Alfa Consultoría S.L., representada por el Sr. Juan Ejemplo García, y Beta Industrias S.A. de C.V. DNI 00000000T. Correo: juan@alfa-ejemplo.test.", ["Alfa Consultoría", "Juan Ejemplo García", "00000000T", "juan@alfa-ejemplo.test"]),
+            ("Portugais", "O presente contrato é celebrado entre Alfa Consultoria Ltda., representada pelo Sr. João Exemplo Silva, e Beta Indústria S.A. CPF 000.000.000-00. E-mail: joao@alfa-exemplo.test.", ["Alfa Consultoria", "João Exemplo Silva", "000.000.000-00", "joao@alfa-exemplo.test"]),
+            ("Allemand", "Dieser Vertrag wird zwischen der Alpha Beratung GmbH, vertreten durch Herr Hans Beispiel, und der Beta Industrie AG geschlossen. E-Mail: hans@alpha-beispiel.test.", ["Alpha Beratung", "Hans Beispiel", "Beta Industrie", "hans@alpha-beispiel.test"]),
+            ("Anglais", "This Agreement is made between Alpha Consulting Ltd, represented by Mr. John Example, and Beta Industries LLC. Contact: john@alpha-example.test.", ["Alpha Consulting", "John Example", "Beta Industries", "john@alpha-example.test"]),
+            ("Russe", "Директор ООО «Альфа Консалтинг» Иван Иванович Примеров заключил договор с АО «Бета Индастриз». Контакт: ivan@alfa-primer.test. Передано Примерову И.И.", ["Альфа Консалтинг", "Примеров", "Бета Индастриз", "ivan@alfa-primer.test"]),
+            ("Chinois", "本合同由北京阿尔法咨询有限公司（以下简称“甲方”）与张示例先生签订。法定代表人：李示例。邮箱：zhang@alpha-shili.test。", ["北京阿尔法咨询有限公司", "张示例", "李示例", "zhang@alpha-shili.test"]),
+        ]
+        for name, text, hide in LANGTXT:
+            await process(pg, text)
+            info = await pg.inner_text("#lang-info")
+            prev = await pg.inner_text("#preview")
+            check(name in info, f"langue détectée affichée : {name} ({info})")
+            check(all(h not in prev for h in hide), f"identités masquées ({name}) : {prev[:90]}")
+        await go(pg, "anonymize")
+        await pg.select_option("#doc-lang", "fr")
+        check("retenue" in await pg.inner_text("#lang-info") and "Français" in await pg.inner_text("#lang-info"), "langue imposée manuellement")
+        await pg.select_option("#doc-lang", "auto")
+        await go(pg, "profile"); await pg.select_option("#pf-labels", "doc")
+        await process(pg, LANGTXT[0][1])
+        prev = await pg.inner_text("#preview")
+        check("Empresa A" in prev and "Persona A" in prev, "désignations dans la langue du document (espagnol) : " + prev[:60])
+        await process(pg, LANGTXT[5][1])
+        check("【公司A】" in await pg.inner_text("#preview"), "désignations chinoises")
+        outs = await pg.evaluate("outputsOf({kind:'pdf', text:'Привет мир', name:'x'}).map(o => o[1] + (o[3] ? '*' : ''))")
+        check(outs[0] == "docx*", "PDF cyrillique : Word proposé en premier : " + str(outs))
+        outs = await pg.evaluate("outputsOf({kind:'pdf', text:'Bonjour', name:'x'}).map(o => o[1] + (o[3] ? '*' : ''))")
+        check(outs[0] == "pdf*", "PDF latin : PDF proposé en premier")
+        await ctx.close()
         # ---- F. Mobile
         ctx, pg = await new_page(b, errs, {"width": 390, "height": 844})
         await pg.goto(URL); await pg.wait_for_selector(".view:not([hidden])")

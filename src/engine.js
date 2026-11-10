@@ -13,9 +13,16 @@ const TYPES = {
   amount: { name: 'Montant', base: 'MONTANT', style: 'num' },
   date: { name: 'Date', base: 'DATE', style: 'num' }
 };
-/* Désignations anglaises (interface en anglais) */
-const TYPES_EN = { person: 'Person', org: 'Company', other: 'Item', email: 'EMAIL', phone: 'PHONE', id: 'ID', iban: 'ACCOUNT', url: 'LINK', amount: 'AMOUNT', date: 'DATE' };
-
+/* Désignations par langue (fr : TYPES ci-dessus) */
+const TYPES_L = {
+  en: { person: 'Person', org: 'Company', other: 'Item', email: 'EMAIL', phone: 'PHONE', id: 'ID', iban: 'ACCOUNT', url: 'LINK', amount: 'AMOUNT', date: 'DATE' },
+  es: { person: 'Persona', org: 'Empresa', other: 'Elemento', email: 'CORREO', phone: 'TELÉFONO', id: 'IDENTIFICADOR', iban: 'CUENTA', url: 'ENLACE', amount: 'IMPORTE', date: 'FECHA' },
+  pt: { person: 'Pessoa', org: 'Empresa', other: 'Elemento', email: 'E-MAIL', phone: 'TELEFONE', id: 'IDENTIFICADOR', iban: 'CONTA', url: 'LINK', amount: 'VALOR', date: 'DATA' },
+  de: { person: 'Person', org: 'Unternehmen', other: 'Element', email: 'E-MAIL', phone: 'TELEFON', id: 'KENNUNG', iban: 'KONTO', url: 'LINK', amount: 'BETRAG', date: 'DATUM' },
+  ru: { person: 'Лицо', org: 'Компания', other: 'Элемент', email: 'ПОЧТА', phone: 'ТЕЛЕФОН', id: 'НОМЕР', iban: 'СЧЁТ', url: 'ССЫЛКА', amount: 'СУММА', date: 'ДАТА' },
+  zh: { person: '人员', org: '公司', other: '项目', email: '邮箱', phone: '电话', id: '编号', iban: '账户', url: '链接', amount: '金额', date: '日期' }
+};
+const TYPES_EN = TYPES_L.en;
 function letters(n) {
   let s = '';
   while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
@@ -23,7 +30,8 @@ function letters(n) {
 }
 function formatLabel(type, n, lang) {
   const t = TYPES[type] || TYPES.other;
-  const base = lang === 'en' ? (TYPES_EN[type] || TYPES_EN.other) : t.base;
+  const base = lang && TYPES_L[lang] ? (TYPES_L[lang][type] || TYPES_L[lang].other) : t.base;
+  if (lang === 'zh') return t.style === 'letter' ? `【${base}${letters(n)}】` : `【${base}${n}】`;
   return t.style === 'letter' ? `${base} ${letters(n)}` : `[${base} ${n}]`;
 }
 
@@ -233,20 +241,34 @@ function transformDocx(entries, matchFn, opts) {
 /* ---------- Recherche / remplacement ---------- */
 function norm(s) { return s.normalize('NFC').replace(/’/g, "'").replace(/\s+/g, ' ').trim().toLowerCase(); }
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&'); }
+const CJK_EDGE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}【】（）「」『』《》]/u;
+const CYR_WORD = /^[\u0400-\u04ff][\u0400-\u04ff\- ]{4,}$/;
+/* Recherche des variantes dans un texte.
+   - Écritures sans espaces (chinois, japonais…) : pas de borne de mot aux extrémités concernées.
+   - Noms cyrilliques : une désinence casuelle de 1 à 3 lettres est tolérée (Иванов → Иванова, Иванову, Ивановым). */
 function buildMatcher(items) {
-  const map = new Map(), pats = [];
+  const map = new Map(), pats = [], cyr = [];
   for (const it of items) {
     for (const v of it.variants) {
       const k = norm(v);
       if (!k || map.has(k)) continue;
       map.set(k, it.repl);
       pats.push(v.trim());
+      if (CYR_WORD.test(k)) cyr.push([k, it.repl]);
     }
   }
   if (!pats.length) return { fn: () => [], map };
+  cyr.sort((a, b) => b[0].length - a[0].length);
+  const cyrSet = new Set(cyr.map(x => x[0]));
   pats.sort((a, b) => b.length - a.length);
-  const src = pats.map(p => escapeRe(p).replace(/\s+/g, '\\s+').replace(/['’]/g, "['’]")).join('|');
-  const re = new RegExp('(?<![\\p{L}\\p{N}_])(?:' + src + ')(?![\\p{L}\\p{N}_])', 'giu');
+  const BL = '(?<![\\p{L}\\p{N}_])', BR = '(?![\\p{L}\\p{N}_])';
+  const src = pats.map(p => {
+    const chars = Array.from(p);
+    const body = escapeRe(p).replace(/\s+/g, '\\s+').replace(/['’]/g, "['’]");
+    const ending = cyrSet.has(norm(p)) ? '[\\u0400-\\u04ff]{0,3}' : '';
+    return (CJK_EDGE.test(chars[0]) ? '' : BL) + body + ending + (CJK_EDGE.test(chars[chars.length - 1]) ? '' : BR);
+  }).join('|');
+  const re = new RegExp(src, 'giu');
   return {
     map,
     fn(text) {
@@ -255,7 +277,9 @@ function buildMatcher(items) {
       let m;
       while ((m = re.exec(text))) {
         if (m[0].length === 0) { re.lastIndex++; continue; }
-        const r = map.get(norm(m[0]));
+        const nm = norm(m[0]);
+        let r = map.get(nm);
+        if (r === undefined) for (const [k, v] of cyr) if (nm.startsWith(k) && nm.length - k.length <= 3) { r = v; break; }
         if (r !== undefined) out.push({ start: m.index, end: m.index + m[0].length, repl: r });
       }
       return out;
@@ -263,33 +287,174 @@ function buildMatcher(items) {
   };
 }
 
+/* ---------- Langues prises en charge : fr, en, es, pt, de, ru, zh ---------- */
+const LANGS = ['fr', 'en', 'es', 'pt', 'de', 'ru', 'zh'];
+/* Mots fréquents servant à reconnaître la langue des textes en alphabet latin.
+   Un mot présent dans plusieurs langues compte moins (poids 1/n). */
+const LANG_WORDS = {
+  fr: 'le la les des du de un une et est dans pour par avec sur sont qui que ne pas au aux ce cette son ses ou mais entre selon ainsi dont lors chaque toute leur',
+  en: 'the and of to in is that for with as by on are this be or from at an not have which it its was were will shall between any each such under upon hereby',
+  es: 'el la los las de del que y en un una por con para es se no al lo su sus como más pero entre este esta son según cada todo todos sobre',
+  pt: 'o a os as de do da dos das que e em um uma por com para é se não ao no na nos nas como mais mas entre este esta são segundo cada todo todos sobre',
+  de: 'der die das den dem des und ist in zu mit von für auf ein eine einen nicht sich auch als bei nach aus wird sind oder zwischen werden dieser jede gemäß'
+};
+const LANG_WEIGHT = (() => {
+  const count = new Map(), sets = {};
+  for (const l of Object.keys(LANG_WORDS)) { sets[l] = new Set(LANG_WORDS[l].split(' ')); for (const w of sets[l]) count.set(w, (count.get(w) || 0) + 1); }
+  const out = {};
+  for (const l of Object.keys(sets)) { out[l] = new Map(); for (const w of sets[l]) out[l].set(w, 1 / count.get(w)); }
+  return out;
+})();
+function detectLanguages(text) {
+  const sample = String(text || '').slice(0, 30000);
+  const han = (sample.match(/\p{Script=Han}/gu) || []).length;
+  const cyr = (sample.match(/\p{Script=Cyrillic}/gu) || []).length;
+  const lat = (sample.match(/\p{Script=Latin}/gu) || []).length;
+  const total = han + cyr + lat;
+  if (!total) return [];
+  const scored = [];
+  if (han / total >= 0.1) scored.push(['zh', han * 3]);
+  if (cyr / total >= 0.1) scored.push(['ru', cyr]);
+  if (lat / total >= 0.1) {
+    const toks = sample.toLowerCase().match(/\p{L}+/gu) || [];
+    const sc = {};
+    for (const l of Object.keys(LANG_WEIGHT)) { sc[l] = 0; for (const t of toks) sc[l] += LANG_WEIGHT[l].get(t) || 0; }
+    const best = Math.max(...Object.values(sc));
+    if (best >= 1) for (const l of Object.keys(sc)) if (sc[l] >= Math.max(2, best * 0.55)) scored.push([l, sc[l] * 6]);
+  }
+  return scored.sort((a, b) => b[1] - a[1]).map(x => x[0]).slice(0, 3);
+}
+
 /* ---------- Détection automatique ---------- */
 const CAPW = "\\p{Lu}[\\p{L}\\p{N}&'’\\-]*";
-const CONN = "(?:\\s+(?:de|du|des|la|le|les|et|of|and|&)\\s+|\\s+d['’]|\\s+)";
+const CONN = "(?:\\s+(?:de|du|des|la|le|les|et|del|las|los|da|do|das|dos|di|of|für|von|van|der|&)\\s+|\\s+d['’]|\\s+)";
 const SEQ = `${CAPW}(?:${CONN}${CAPW}){0,5}`;
-const LF = "(?:SARL|SASU|SAS|SA|SPRLU|SPRL|SUARL|SCS|SNC|GIE|ASBL|SCRL|Ltd|LLC|Inc|GmbH|Limited|S\\.A\\.R\\.L\\.?|S\\.A\\.S\\.?|S\\.A\\.?|S\\.P\\.R\\.L\\.?)";
+const LF = "(?:GmbH\\s*&\\s*Co\\.?\\s*KG|S\\.\\s?A\\.\\s?de\\s+C\\.\\s?V\\.?|S\\.\\s?de\\s+R\\.\\s?L\\.?(?:\\s+de\\s+C\\.\\s?V\\.?)?|Unipessoal\\s+Lda\\.?|"
+  + "SARL|SASU|SAS|SA|SPRLU|SPRL|SUARL|SCS|SNC|GIE|ASBL|SCRL|SCI|EURL|Ltd|LLC|LLP|PLC|plc|Inc|Corp|GmbH|AG|KG|OHG|GbR|UG|mbH|Limited|Ltda|Lda|SRL|SpA|"
+  + "S\\.A\\.R\\.L\\.?|S\\.A\\.S\\.?|S\\.A\\.?|S\\.L\\.U\\.?|S\\.L\\.?|S\\.R\\.L\\.?|S\\.P\\.R\\.L\\.?|S\\.p\\.A\\.?|S/A|e\\.V\\.|EIRELI|Eireli)";
 const RE_LEGAL = new RegExp(`(?<![\\p{L}\\p{N}])(${SEQ})\\s+(${LF})(?![\\p{L}\\p{N}])`, 'gu');
-const RE_ORGPREFIX = new RegExp(`(?<![\\p{L}\\p{N}])(?:Société|Entreprise|Ets|Établissements|Etablissements|Cabinet|Banque|Groupe|Compagnie|Fondation|Association|Clinique|Hôpital|Université|Ministère)\\s+(?:(?:de la|de l['’]|du|des|de|d['’])\\s*)?${SEQ}`, 'gu');
-const HON = "(?:M\\.|Mr\\.?|Mme\\.?|Mlle\\.?|Monsieur|Madame|Mademoiselle|Maître|Me|Dr\\.?|Docteur|Pr\\.?|Professeur|Sieur|Honorable|Hon\\.|Mgr)";
-const NAMEW = "\\p{Lu}[\\p{L}'’\\-]+";
-const RE_HON = new RegExp(`(?<![\\p{L}\\p{N}])${HON}\\s+((?:${NAMEW})(?:\\s+${NAMEW}){0,3})`, 'gu');
+const ORG_WORDS = "Société|Entreprise|Ets|Établissements|Etablissements|Cabinet|Banque|Groupe|Compagnie|Fondation|Association|Clinique|Hôpital|Université|Ministère|"
+ 
+  + "Empresa|Sociedad|Compañía|Banco|Grupo|Fundación|Asociación|Universidad|Ministerio|Instituto|Cooperativa|Despacho|Bufete|Ayuntamiento|"
+  + "Sociedade|Companhia|Fundação|Associação|Universidade|Ministério|Escritório|Prefeitura|"
+  + "Firma|Gesellschaft|Unternehmen|Gruppe|Stiftung|Verein|Universität|Krankenhaus|Klinikum|Ministerium|Institut|Genossenschaft|Kanzlei|Behörde|"
+  + "Компания|Корпорация|Банк|Группа|Фонд|Ассоциация|Университет|Больница|Министерство|Институт|Агентство|Холдинг|Фирма";
+const ORG_PREP = "(?:(?:of the|of|de la|de las|de los|del|de l['’]|du|des|de|da|do|das|dos|d['’]|für|der|die|das|von|zur|zum)\\s*)?";
+const RE_ORGPREFIX = new RegExp(`(?<![\\p{L}\\p{N}])(?:${ORG_WORDS})\\s+${ORG_PREP}${SEQ}`, 'gu');
+const RE_ORGOF = new RegExp(`(?<![\\p{L}\\p{N}])(?:University|Bank|Ministry|Department|Institute|Foundation|Hospital|Agency|Council|College|School|Company|Group|Association|Trust|Corporation)\\s+of\\s+(?:the\\s+)?${SEQ}`, 'gu');
+const RE_ORGQUOTED = new RegExp(`(?<![\\p{L}\\p{N}])(?:${ORG_WORDS})\\s*[«"“„]([^»"”“\\n]{2,60})[»"”“]`, 'gu');
+const ORG_SUFFIX = "Group|Holdings|Partners|Associates|Foundation|Institute|University|Bank|Consulting|Industries|Technologies|Solutions|Association|Company|Corporation|Stiftung|Verein|Gruppe|Grupo|Fundación|Fundação|Banco|Universidad|Universidade|Universität|Consultoría|Consultoria|Beratung|Kanzlei";
+const RE_ORGSUFFIX = new RegExp(`(?<![\\p{L}\\p{N}])(${SEQ})\\s+(${ORG_SUFFIX})(?![\\p{L}\\p{N}])`, 'gu');
+/* Russie : ООО « … », АО « … » */
+const RU_LF = "(?:ООО|ОАО|ЗАО|ПАО|АО|ИП|НКО|ФГУП|МУП|ГУП)";
+const RE_RU_ORGQ = new RegExp(`(?<![\\p{L}\\p{N}])${RU_LF}\\s*[«"“„]([^»"”“\\n]{2,60})[»"”“]`, 'gu');
+const RE_RU_ORG = new RegExp(`(?<![\\p{L}\\p{N}])${RU_LF}\\s+(\\p{Lu}[\\p{L}\\-]+(?:\\s+\\p{Lu}[\\p{L}\\-]+){0,2})`, 'gu');
+/* Chine : …有限公司, …银行, …大学 */
+const ZH_ORG_SUFFIX = "(?:股份有限公司|有限责任公司|有限公司|集团公司|集团|分公司|子公司|银行|大学|学院|医院|基金会|协会|事务所|研究院|研究所|委员会|合作社|商会)";
+const RE_ZH_ORG = new RegExp(`[\\p{Script=Han}A-Za-z0-9（）()]{2,14}?${ZH_ORG_SUFFIX}`, 'gu');
+const ZH_LEAD = ['本合同', '合同', '我们的', '你们的', '他们的', '我们', '你们', '他们', '贵', '敝', '此', '这', '那', '协议书', '协议', '甲方', '乙方', '丙方', '签订', '签署', '签约', '支付', '交付', '委托', '聘请', '收购', '购买', '转让', '租赁', '由', '与', '和', '及', '向', '在', '于', '对', '给', '同', '跟', '被', '将', '把', '从', '为', '是', '的', '本', '该', '至', '到', '但', '或', '并', '且']
+  .sort((a, b) => b.length - a.length);
+const ZH_CUT = /(?:先生|女士|小姐|博士|教授|律师|医生|总经理|经理|董事长|总监|主任|老师|同志|工程师|会计师|[与和及由向对给跟同将把被从])/gu;
+function zhStripLead(s) {
+  // coupe après le dernier titre de personne ou mot de liaison qui précède le nom de la société
+  let cut = 0;
+  for (const m of s.matchAll(ZH_CUT)) { const end = m.index + m[0].length; if (s.length - end >= 4) cut = end; }
+  s = s.slice(cut);
+  let go = true;
+  while (go) { go = false; for (const w of ZH_LEAD) if (s.length > w.length + 2 && s.startsWith(w)) { s = s.slice(w.length); go = true; break; } }
+  return s;
+}
+
+/* Personnes : titres de civilité (fr, en, es, pt, de, ru) */
+const HON = "(?:M\\.|Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Mme\\.?|Mlle\\.?|Monsieur|Madame|Mademoiselle|Maître|Me|Dr\\.?|Dra\\.?|Docteur|Doctor|Doutor|Doutora|Pr\\.?|Prof\\.?|Professeur|Professor|Profesor|Profesora|Professora|Sieur|Honorable|Hon\\.|Mgr|Sir|Dame|Lord|Lady|"
+  + "Sr\\.?|Sra\\.?|Srta\\.?|Señor|Señora|Señorita|Senhor|Senhora|Don|Doña|Dona|D\\.|Dña\\.|Lic\\.|Ing\\.|Eng\\.|Herr|Frau|Fräulein|Dipl\\.-Ing\\.|Mag\\.|г-н|г-жа|господин|госпожа|гражданин|гражданка)";
+const NTOK = "(?:\\p{Lu}[\\p{L}'’\\-]+|\\p{Lu}\\.)";
+const NPART = "(?:\\s+(?:de\\s+la|de\\s+los|de\\s+las|del|de|da|do|das|dos|di|du|von|van|der|den|zu|al|el|bin|ibn))*";
+const NAME = `${NTOK}(?:${NPART}\\s*${NTOK}){0,3}`;
+const RE_HON = new RegExp(`(?<![\\p{L}\\p{N}])(?:${HON}\\s+)+(${NAME})`, 'gu');
 const RE_CAPS1 = /(?<![\p{L}\p{N}])\p{Lu}{2,}(?:[ \-]\p{Lu}{2,}){0,2} +\p{Lu}\p{Ll}+(?:[ \-]\p{Lu}\p{Ll}+)?(?![\p{L}])/gu;
-const RE_CAPS2 = /(?<![\p{L}\p{N}])\p{Lu}\p{Ll}+(?:[ \-]\p{Lu}\p{Ll}+)? +\p{Lu}{2,}(?: \p{Lu}{2,}){0,2}(?![\p{L}])/gu;
+const RE_CAPS2 = /(?<![\p{L}\p{N}])\p{Lu}\p{Ll}+(?:[ \-]\p{Lu}\p{Ll}+)?(?: | )+\p{Lu}{2,}(?: \p{Lu}{2,}){0,2}(?![\p{L}])/gu;
+/* Initiales : « J. R. Smith », « Smith J.R. », « Иванов И.И. » */
+const RE_INIT1 = /(?<![\p{L}\p{N}])\p{Lu}\.\s?(?:\p{Lu}\.\s?)?\p{Lu}[\p{L}'’\-]{2,}(?![\p{L}])/gu;
+const RE_INIT2 = /(?<![\p{L}\p{N}])\p{Lu}[\p{L}'’\-]{2,}\s+\p{Lu}\.\s?(?:\p{Lu}\.)?(?![\p{L}])/gu;
+const RE_CYR_INIT = /(?<![\p{L}\p{N}])\p{Lu}[а-яё\-]{2,}\s+\p{Lu}\.\s?(?:\p{Lu}\.)?|(?<![\p{L}\p{N}])\p{Lu}\.\s?(?:\p{Lu}\.\s?)?\p{Lu}[а-яё\-]{2,}(?![\p{L}])/gu;
+/* Noms russes complets : Фамилия Имя Отчество, Имя Отчество */
+const RE_RU_FIO = /(?<![\p{L}\p{N}])(?:\p{Lu}[а-яё\-]+\s+)?\p{Lu}[а-яё\-]+\s+\p{Lu}[а-яё]+(?:(?:ович|евич|ьич)(?:а|у|ем|е)?|(?:овна|евна|ична|инична)(?:ы|е|у|ой)?)(?:\s+\p{Lu}[\u0430-\u044f\u0451\-]+)?(?![\p{L}])/gu;
+/* Noms chinois : titre après le nom, étiquette devant le nom, translittération avec « · » */
+const ZH_SURNAMES = "欧阳|司马|上官|诸葛|慕容|夏侯|皇甫|尉迟|公孙|长孙|东方|独孤|南宫|王|李|张|刘|陈|杨|黄|赵|吴|周|徐|孙|马|朱|胡|郭|何|高|林|罗|郑|梁|谢|宋|唐|许|韩|冯|邓|曹|彭|曾|肖|田|董|袁|潘|于|蒋|蔡|余|杜|叶|程|苏|魏|吕|丁|任|沈|姚|卢|姜|崔|钟|谭|陆|汪|范|金|石|廖|贾|夏|韦|付|方|白|邹|孟|熊|秦|邱|江|尹|薛|闫|段|雷|侯|龙|史|陶|黎|贺|顾|毛|郝|龚|邵|万|钱|严|覃|武|戴|莫|孔|向|汤";
+const ZH_TITLE = "(?:先生|女士|小姐|博士|教授|律师|医生|总经理|经理|董事长|总监|主任|老师|同志|法官|工程师|会计师)";
+const RE_ZH_PERSON = new RegExp(`((?:${ZH_SURNAMES})[\\p{Script=Han}]{0,2}?)(?=${ZH_TITLE})`, 'gu');
+const RE_ZH_LABEL = /(?<=(?:姓名|名字|联系人|法定代表人|负责人|委托代理人|授权代表|签字人|甲方代表|乙方代表|代表人|申请人|被告|原告|当事人|收款人|付款人|户名)\s*[:：]\s*)[\p{Script=Han}]{2,5}(?:[·•][\p{Script=Han}]{1,6})?/gu;
+const RE_ZH_TRANSL = /[\p{Script=Han}]{2,6}[·•][\p{Script=Han}]{2,6}/gu;
+
 const RE_EMAIL = /[\p{L}\p{N}._%+\-]+@[\p{L}\p{N}.\-]+\.\p{L}{2,}/gu;
 const RE_URL = /(?<![\p{L}\p{N}@.])(?:https?:\/\/|www\.)[^\s<>"'()«»]+[^\s<>"'()«».,;:!?]/giu;
-const RE_PHONE = /(?<![\p{L}\p{N}])(?:(?:\+|00)\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}|0\d{1,2}(?:[\s.-]?\d{2,4}){2,4})(?![\p{L}\p{N}])/gu;
+const RE_PHONE = new RegExp("(?<![\\p{L}\\p{N}])(?:"
+  + "(?:\\+|00)\\d{1,3}[\\s.-]?\\(?\\d{1,4}\\)?(?:[\\s.-]?\\d{2,4}){2,4}"
+  + "|0\\d{1,2}(?:[\\s.-]?\\d{2,4}){2,4}"
+  + "|0\\d{3,4}[\\s/-]\\d{4,8}"
+  + "|0\\d{2,3}-\\d{7,8}"
+  + "|8[\\s-]?\\(\\d{3}\\)[\\s-]?\\d{3}[\\s-]?\\d{2}[\\s-]?\\d{2}"
+  + "|\\(\\d{3}\\)\\s?\\d{3}[\\s.-]\\d{4}"
+  + "|\\d{3}[\\s.-]\\d{3}[\\s.-]\\d{4}"
+  + "|1[3-9]\\d{9}"
+  + ")(?![\\p{L}\\p{N}])", 'gu');
 const RE_IBAN = /(?<![\p{L}\p{N}])[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?(?![\p{L}\p{N}])/gu;
 const RE_ID1 = /(?<![\p{L}\p{N}])[A-Z]{2}\/[A-Z]{2,4}\/RCCM\/[\w\-]+/giu;
-const RE_ID2 = /(?<=\b(?:NIF|IDNAT|Id\.? ?Nat\.?|RCCM|N° ?Impôt)\s*:?\s*)(?=[A-Z0-9\/.\-]*\d)[A-Z0-9][A-Z0-9\/.\-]{4,}[A-Z0-9]/giu;
-const RE_AMOUNT1 = /(?<![\p{L}\p{N}])\d+(?:[ \u00a0.,]\d{3})*(?:[.,]\d{1,2})?\s?(?:USD|EUR|CDF|FC|XAF|XOF|€|\$|dollars?(?:\s+américains?)?|euros?|francs?(?:\s+congolais)?)(?![\p{L}])/giu;
-const RE_AMOUNT2 = /(?<![\p{L}\p{N}])(?:USD|\$|€|EUR)\s?\d+(?:[ \u00a0.,]\d{3})*(?:[.,]\d{1,2})?(?![\p{N}])/giu;
-const RE_DATE1 = /(?<![\p{L}\p{N}])\d{1,2}(?:er)?\s(?:janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s\d{4}(?![\p{L}\p{N}])/giu;
-const RE_DATE2 = /(?<![\p{L}\p{N}])\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}(?![\p{L}\p{N}])/gu;
+const ID_LABELS = "NIF|IDNAT|Id\\.? ?Nat\\.?|RCCM|N° ?Impôt|Passport|Passeport|Pasaporte|Passaporte|Reisepass|Personalausweis|Ausweis|DNI|NIE|CIF|CPF|CNPJ|SSN|Steuer-ID|Steuernummer|USt-IdNr\\.?|VAT(?: No\\.?| number)?|паспорт|Паспорт|护照|身份证号码|身份证号|身份证";
+const RE_ID2 = new RegExp(`(?<=(?:${ID_LABELS})(?:\\s*(?:No\\.?|Nr\\.?|n[°º]|number|numéro|número|номер|№|号码|号))?\\s*[:：#]?\\s*)(?=[A-Z0-9\\/.\\-]*\\d)[A-Z0-9][A-Z0-9\\/.\\-]{4,}[A-Z0-9]`, 'giu');
+const RE_ID_NAT = new RegExp("(?<![\\p{L}\\p{N}])(?:"
+  + "\\d{8}[A-HJ-NP-TV-Z]|[XYZ]\\d{7}[A-HJ-NP-TV-Z]|[ABCDEFGHJNPQRSUVW]\\d{7}[0-9A-J]"          // Espagne : DNI, NIE, CIF
+  + "|\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}|\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}"                    // Brésil : CPF, CNPJ
+  + "|HR[AB]\\s?\\d{3,7}"                                                                         // Allemagne : registre du commerce
+  + "|ATU\\d{8}|DE\\d{9}|BE0?\\d{9,10}|NL\\d{9}B\\d{2}|PT\\d{9}|IT\\d{11}|PL\\d{10}|ES[A-Z0-9]\\d{7}[A-Z0-9]|FR[A-Z0-9]{2}\\d{9}"   // TVA UE
+  + "|\\d{3}-\\d{3}-\\d{3} \\d{2}"                                                                // Russie : SNILS
+  + "|[1-9]\\d{5}(?:19|20)\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]"          // Chine : carte d'identité
+  + "|[0-9A-HJ-NP-RT-UW-Y]{2}\\d{6}[0-9A-HJ-NP-RT-UW-Y]{10}"                                      // Chine : code de crédit social unifié
+  + "|\\d{3}-\\d{2}-\\d{4}"                                                                      // États-Unis : SSN
+  + ")(?![\\p{L}\\p{N}])", 'gu');
+const RE_ID_RU = /(?<=(?:ИНН|ОГРНИП|ОГРН|КПП|СНИЛС|БИК)\s*[:№]?\s*)\d[\d\- ]{7,19}\d/gu;
+const RE_ID_ZH = /(?<=统一社会信用代码\s*[:：]?\s*)[0-9A-Z]{18}/gu;
+const RE_BANK = new RegExp("(?<=(?:账号|账户|卡号|银行账号|银行卡号|Account(?: No\\.?| Number)?|Konto(?:nummer)?|Cuenta|Conta|Счёт|Счет|р/с|расчётный счёт)\\s*[:：№#]?\\s*)\\d[\\d \\-]{9,28}\\d", 'giu');
+const RE_SWIFT = /(?<=(?:SWIFT|BIC)\s*[:：]?\s*)[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?(?![A-Z0-9])/gu;
 
-const STOP_START = new Set(['entre', 'et', 'la', 'le', 'les', 'l', 'un', 'une', 'par', 'avec', 'pour', 'chez', 'de', 'du', 'des',
-  'au', 'aux', 'à', 'sous', 'sur', 'dans', 'ledit', 'ladite', 'lesdits', 'article', 'contrat', 'convention', 'accord', 'société',
-  'sociétés', 'projet', 'si', 'ou', 'mais', 'donc', 'or', 'ni', 'car', 'ce', 'cette', 'ces', 'notre', 'votre', 'leur']);
-function isStop(w) { return STOP_START.has(norm(w).replace(/'.*$/, '')); }
+const CUR_W = "USD|EUR|GBP|CHF|CAD|AUD|CNY|RMB|RUB|BRL|MXN|CDF|FC|XAF|XOF|€|\\$|£|¥|￥|₽|R\\$|US\\$|"
+  + "dollars?(?:\\s+américains?)?|euros?|francs?(?:\\s+congolais)?|pounds?|dólares?|dólar|libras?|reais|real|pesos?|Dollar|Euro|Franken|Pfund|рублей|рубля|рубль|руб\\.|долларов|евро|юаней|юань";
+const SCALE = "(?:\\s?(?:millions?|millones|milhões|milhão|Millionen|Million|Mio\\.?|Mrd\\.?|billions?|млн|млрд|тыс\\.?)(?:\\s+de)?)?";
+const RE_AMOUNT1 = new RegExp(`(?<![\\p{L}\\p{N}])\\d+(?:[ \\u00a0.,']\\d{3})*(?:[.,]\\d{1,2})?${SCALE}\\s?(?:${CUR_W})(?![\\p{L}])`, 'giu');
+const RE_AMOUNT2 = new RegExp(`(?<![\\p{L}\\p{N}])(?:USD|\\$|€|EUR|£|GBP|¥|￥|₽|R\\$|US\\$|CHF|CNY|RMB)\\s?\\d+(?:[ \\u00a0.,']\\d{3})*(?:[.,]\\d{1,2})?(?![\\p{N}])`, 'giu');
+const RE_AMOUNT3 = /(?<![\d.,])(?:人民币|美元|欧元|港币)?\d+(?:[,.]\d+)*\s?(?:万|亿)?(?:元|美元|欧元|块)/gu;
+const MON = {
+  fr: 'janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre',
+  en: 'January|February|March|April|May|June|July|August|September|October|November|December',
+  es: 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre',
+  pt: 'janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro',
+  de: 'Januar|Jänner|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember',
+  ru: 'января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря'
+};
+const MONTHS = Object.values(MON).join('|');
+const RE_DATE1 = new RegExp(`(?<![\\p{L}\\p{N}])\\d{1,2}(?:er|st|nd|rd|th|\\.|º|°)?\\s(?:de\\s)?(?:${MONTHS})(?:\\s(?:de|del)\\s|,?\\s)\\d{4}(?:\\s?г\\.?)?(?![\\p{L}\\p{N}])`, 'giu');
+const RE_DATE_EN = new RegExp(`(?<![\\p{L}\\p{N}])(?:${MON.en}|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\\.?\\s\\d{1,2}(?:st|nd|rd|th)?,?\\s\\d{4}(?![\\p{L}\\p{N}])`, 'gu');
+const RE_DATE2 = /(?<![\p{L}\p{N}])\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}(?![\p{L}\p{N}])/gu;
+const RE_DATE_ISO = /(?<![\p{L}\p{N}])\d{4}-\d{2}-\d{2}(?![\p{L}\p{N}])/gu;
+const RE_DATE_ZH = /\d{4}\s?年\s?\d{1,2}\s?月(?:\s?\d{1,2}\s?[日号])?/gu;
+
+/* Mots à ne pas inclure en début de nom propre (début de phrase, articles, prépositions) */
+const STOP_BY_LANG = {
+  fr: 'entre et la le les l un une par avec pour chez de du des au aux à sous sur dans ledit ladite lesdits article contrat convention accord société sociétés projet si ou mais donc or ni car ce cette ces notre votre leur',
+  en: 'the a an this that these those between and or by with for of to in on at from under agreement contract article section company party parties if but our your their dear',
+  es: 'el la los las un una entre y e o por con para de del en al contrato acuerdo artículo sociedad empresa si pero nuestro vuestro su',
+  pt: 'o a os as um uma entre e ou por com para de do da dos das em no na contrato acordo artigo sociedade empresa se mas nosso vosso seu',
+  de: 'der die das den dem des ein eine einen zwischen und oder von mit für in im an auf bei vertrag vereinbarung artikel gesellschaft firma wenn aber unser ihr',
+  ru: 'и в на с по для от к между договор соглашение статья компания если но'
+};
+let ACTIVE_STOP = new Set(Object.values(STOP_BY_LANG).join(' ').split(' '));
+function setStopLangs(langs) {
+  const l = (langs && langs.length ? langs : Object.keys(STOP_BY_LANG)).filter(x => STOP_BY_LANG[x]);
+  const use = l.length ? l : Object.keys(STOP_BY_LANG);
+  ACTIVE_STOP = new Set(use.map(x => STOP_BY_LANG[x]).join(' ').split(' '));
+}
+function isStop(w) { return ACTIVE_STOP.has(norm(w).replace(/'.*$/, '')); }
 function stripStart(seq) {
   const words = seq.split(/\s+/);
   while (words.length > 1 && isStop(words[0])) words.shift();
@@ -303,6 +468,8 @@ function tokensOfName(name) {
 }
 function detect(text, opt) {
   const o = opt || {};
+  const langs = (o.langs && o.langs.length) ? o.langs : detectLanguages(text);
+  setStopLangs(langs);
   const found = new Map(), spans = [];
   const overlaps = (s, e) => spans.some(([a, b]) => s < b && e > a);
   const push = (type, variants, conf, key, idx) => {
@@ -315,6 +482,13 @@ function detect(text, opt) {
     }
     if (idx < e.first) e.first = idx;
   };
+  const claim = (m, type, variants, conf, key) => {
+    const s = m.index, e = s + m[0].length;
+    if (overlaps(s, e)) return false;
+    spans.push([s, e]);
+    push(type, variants, conf, key || m[0], s);
+    return true;
+  };
   if (o.org !== false) {
     for (const m of text.matchAll(RE_LEGAL)) {
       const full = m[0], seq = m[1], lf = m[2], stripped = stripStart(seq);
@@ -324,11 +498,22 @@ function detect(text, opt) {
       spans.push([m.index, m.index + full.length]);
       push('org', vars, 'high', stripped, m.index);
     }
-    for (const m of text.matchAll(RE_ORGPREFIX)) {
-      const s = m.index, e = s + m[0].length;
+    for (const m of text.matchAll(RE_RU_ORGQ)) claim(m, 'org', [m[0], m[1].trim()], 'high', m[1]);
+    for (const m of text.matchAll(RE_RU_ORG)) claim(m, 'org', [m[0], m[1]], 'high', m[1]);
+    for (const m of text.matchAll(RE_ORGQUOTED)) claim(m, 'org', [m[0], m[1].trim()], 'high', m[1]);
+    for (const m of text.matchAll(RE_ORGPREFIX)) claim(m, 'org', [m[0]], 'high');
+    for (const m of text.matchAll(RE_ORGOF)) claim(m, 'org', [m[0]], 'high');
+    for (const m of text.matchAll(RE_ORGSUFFIX)) {
+      const stripped = stripStart(m[1]);
+      if (isStop(stripped)) continue;
+      claim(m, 'org', [m[0].replace(m[1], stripped), m[0]], 'high', stripped + ' ' + m[2]);
+    }
+    for (const m of text.matchAll(RE_ZH_ORG)) {
+      const name = zhStripLead(m[0]);
+      const s = m.index + (m[0].length - name.length), e = m.index + m[0].length;
       if (overlaps(s, e)) continue;
       spans.push([s, e]);
-      push('org', [m[0]], 'high', m[0], s);
+      push('org', [name], 'high', name, s);
     }
   }
   if (o.person !== false) {
@@ -338,14 +523,16 @@ function detect(text, opt) {
       spans.push([s, e]);
       push('person', tokensOfName(name), 'high', name, s);
     }
-    for (const re of [RE_CAPS1, RE_CAPS2]) {
-      for (const m of text.matchAll(re)) {
-        const s = m.index, e = s + m[0].length;
-        if (overlaps(s, e)) continue;
-        spans.push([s, e]);
-        push('person', tokensOfName(m[0]), 'medium', m[0], s);
-      }
-    }
+    const mk = (re, conf, tokens) => {
+      for (const m of text.matchAll(re)) claim(m, 'person', tokens ? tokensOfName(m[0]) : [m[0]], conf);
+    };
+    mk(RE_RU_FIO, 'high', true);
+    mk(RE_CYR_INIT, 'high', true);
+    for (const m of text.matchAll(RE_ZH_LABEL)) claim(m, 'person', [m[0]], 'high');
+    for (const m of text.matchAll(RE_ZH_PERSON)) claim(m, 'person', [m[0]], 'high');
+    for (const m of text.matchAll(RE_ZH_TRANSL)) claim(m, 'person', [m[0]], 'high');
+    for (const re of [RE_CAPS1, RE_CAPS2]) mk(re, 'medium', true);
+    for (const re of [RE_INIT1, RE_INIT2]) mk(re, 'medium', true);
   }
   const simple = (on, type, re, conf) => {
     if (on === false) return;
@@ -353,11 +540,12 @@ function detect(text, opt) {
   };
   simple(o.email, 'email', RE_EMAIL);
   simple(o.url, 'url', RE_URL);
-  simple(o.id, 'id', RE_ID1); simple(o.id, 'id', RE_ID2);
-  simple(o.iban, 'iban', RE_IBAN);
+  simple(o.id, 'id', RE_ID1); simple(o.id, 'id', RE_ID2); simple(o.id, 'id', RE_ID_NAT);
+  simple(o.id, 'id', RE_ID_RU); simple(o.id, 'id', RE_ID_ZH); simple(o.id, 'id', RE_SWIFT);
+  simple(o.iban, 'iban', RE_IBAN); simple(o.iban, 'iban', RE_BANK);
   simple(o.phone, 'phone', RE_PHONE, 'medium');
-  simple(o.amount === true, 'amount', RE_AMOUNT1); simple(o.amount === true, 'amount', RE_AMOUNT2);
-  simple(o.date === true, 'date', RE_DATE1); simple(o.date === true, 'date', RE_DATE2);
+  for (const re of [RE_AMOUNT1, RE_AMOUNT2, RE_AMOUNT3]) simple(o.amount === true, 'amount', re);
+  for (const re of [RE_DATE1, RE_DATE_EN, RE_DATE2, RE_DATE_ISO, RE_DATE_ZH]) simple(o.date === true, 'date', re);
   const all = Array.from(found.values());
   const sure = new Set();
   for (const e of all) if (e.conf === 'high') for (const v of e.variants) sure.add(norm(v));
@@ -370,7 +558,10 @@ const COMMON_CAPS = new Set(['le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 
   'toutes', 'article', 'articles', 'contrat', 'convention', 'entre', 'ainsi', 'dès', 'lorsque', 'lors', 'selon', 'conformément',
   'notamment', 'toutefois', 'cependant', 'sous', 'vers', 'chez', 'que', 'qui', 'quand', 'comme', 'afin', 'titre', 'chapitre', 'section',
   'partie', 'parties', 'annexe', 'objet', 'durée', 'fait', 'signé', 'lu', 'approuvé', 'république', 'démocratique', 'congo', 'monsieur', 'madame', 'mademoiselle', 'maître', 'docteur', 'professeur',
-  'rccm', 'iban', 'nif', 'usd', 'eur', 'cdf', 'tva', 'sarl', 'sas', 'sasu', 'sprl']);
+  'rccm', 'iban', 'nif', 'usd', 'eur', 'cdf', 'tva', 'sarl', 'sas', 'sasu', 'sprl',
+  'the', 'this', 'that', 'and', 'for', 'with', 'between', 'agreement', 'article', 'section', 'party', 'parties', 'mr', 'mrs', 'ms',
+  'el', 'los', 'las', 'del', 'por', 'con', 'contrato', 'acuerdo', 'artículo', 'señor', 'señora', 'os', 'as', 'uma', 'entre', 'acordo', 'artigo',
+  'der', 'die', 'das', 'den', 'dem', 'und', 'vertrag', 'herr', 'frau', 'zwischen', 'договор', 'статья', 'соглашение']);
 function residualWords(text, labelWords, limit) {
   const re = /(?<![\p{L}\p{N}])\p{Lu}[\p{L}'’\-]{2,}(?![\p{L}])/gu;
   const stats = new Map();
@@ -417,5 +608,5 @@ function buildDocxFromText(text) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { TYPES, TYPES_EN, letters, formatLabel, unzip, zip, docxPartsText, transformDocx, applyMatches, buildMatcher, detect, norm, residualWords, paragraphTexts, rewriteXml, buildDocxFromText };
+  module.exports = { TYPES, TYPES_EN, TYPES_L, LANGS, detectLanguages, letters, formatLabel, unzip, zip, docxPartsText, transformDocx, applyMatches, buildMatcher, detect, norm, residualWords, paragraphTexts, rewriteXml, buildDocxFromText };
 }
