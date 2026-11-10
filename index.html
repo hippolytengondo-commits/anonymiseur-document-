@@ -273,6 +273,8 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
       <div class="opts">
         <label><input type="checkbox" id="o-org" checked> <span data-i18n="opt.org"></span></label>
         <label><input type="checkbox" id="o-person" checked> <span data-i18n="opt.person"></span></label>
+        <label><input type="checkbox" id="o-address" checked> <span data-i18n="opt.address"></span></label>
+        <label><input type="checkbox" id="o-number" checked> <span data-i18n="opt.number"></span></label>
         <label><input type="checkbox" id="o-email" checked> <span data-i18n="opt.email"></span></label>
         <label><input type="checkbox" id="o-phone" checked> <span data-i18n="opt.phone"></span></label>
         <label><input type="checkbox" id="o-id" checked> <span data-i18n="opt.id"></span></label>
@@ -508,10 +510,12 @@ this.workerSrc)).WorkerMessageHandler})())}}class WorkerTransport{downloadInfoCa
 const TYPES = {
   person: { name: 'Personne', base: 'Personne', style: 'letter' },
   org: { name: 'Société / organisation', base: 'Société', style: 'letter' },
+  address: { name: 'Adresse', base: 'Adresse', style: 'letter' },
   other: { name: 'Autre terme', base: 'Élément', style: 'letter' },
   email: { name: 'E-mail', base: 'E-MAIL', style: 'num' },
   phone: { name: 'Téléphone', base: 'TÉLÉPHONE', style: 'num' },
   id: { name: 'Identifiant (RCCM, NIF…)', base: 'IDENTIFIANT', style: 'num' },
+  number: { name: 'Numéro / référence', base: 'NUMÉRO', style: 'num' },
   iban: { name: 'Compte bancaire', base: 'COMPTE', style: 'num' },
   url: { name: 'Lien web', base: 'LIEN', style: 'num' },
   amount: { name: 'Montant', base: 'MONTANT', style: 'num' },
@@ -519,12 +523,12 @@ const TYPES = {
 };
 /* Désignations par langue (fr : TYPES ci-dessus) */
 const TYPES_L = {
-  en: { person: 'Person', org: 'Company', other: 'Item', email: 'EMAIL', phone: 'PHONE', id: 'ID', iban: 'ACCOUNT', url: 'LINK', amount: 'AMOUNT', date: 'DATE' },
-  es: { person: 'Persona', org: 'Empresa', other: 'Elemento', email: 'CORREO', phone: 'TELÉFONO', id: 'IDENTIFICADOR', iban: 'CUENTA', url: 'ENLACE', amount: 'IMPORTE', date: 'FECHA' },
-  pt: { person: 'Pessoa', org: 'Empresa', other: 'Elemento', email: 'E-MAIL', phone: 'TELEFONE', id: 'IDENTIFICADOR', iban: 'CONTA', url: 'LINK', amount: 'VALOR', date: 'DATA' },
-  de: { person: 'Person', org: 'Unternehmen', other: 'Element', email: 'E-MAIL', phone: 'TELEFON', id: 'KENNUNG', iban: 'KONTO', url: 'LINK', amount: 'BETRAG', date: 'DATUM' },
-  ru: { person: 'Лицо', org: 'Компания', other: 'Элемент', email: 'ПОЧТА', phone: 'ТЕЛЕФОН', id: 'НОМЕР', iban: 'СЧЁТ', url: 'ССЫЛКА', amount: 'СУММА', date: 'ДАТА' },
-  zh: { person: '人员', org: '公司', other: '项目', email: '邮箱', phone: '电话', id: '编号', iban: '账户', url: '链接', amount: '金额', date: '日期' }
+  en: { address: 'Address', number: 'NUMBER', person: 'Person', org: 'Company', other: 'Item', email: 'EMAIL', phone: 'PHONE', id: 'ID', iban: 'ACCOUNT', url: 'LINK', amount: 'AMOUNT', date: 'DATE' },
+  es: { address: 'Dirección', number: 'NÚMERO', person: 'Persona', org: 'Empresa', other: 'Elemento', email: 'CORREO', phone: 'TELÉFONO', id: 'IDENTIFICADOR', iban: 'CUENTA', url: 'ENLACE', amount: 'IMPORTE', date: 'FECHA' },
+  pt: { address: 'Endereço', number: 'NÚMERO', person: 'Pessoa', org: 'Empresa', other: 'Elemento', email: 'E-MAIL', phone: 'TELEFONE', id: 'IDENTIFICADOR', iban: 'CONTA', url: 'LINK', amount: 'VALOR', date: 'DATA' },
+  de: { address: 'Adresse', number: 'NUMMER', person: 'Person', org: 'Unternehmen', other: 'Element', email: 'E-MAIL', phone: 'TELEFON', id: 'KENNUNG', iban: 'KONTO', url: 'LINK', amount: 'BETRAG', date: 'DATUM' },
+  ru: { address: 'Адрес', number: 'НОМЕР', person: 'Лицо', org: 'Компания', other: 'Элемент', email: 'ПОЧТА', phone: 'ТЕЛЕФОН', id: 'ИДЕНТИФИКАТОР', iban: 'СЧЁТ', url: 'ССЫЛКА', amount: 'СУММА', date: 'ДАТА' },
+  zh: { address: '地址', number: '号码', person: '人员', org: '公司', other: '项目', email: '邮箱', phone: '电话', id: '编号', iban: '账户', url: '链接', amount: '金额', date: '日期' }
 };
 const TYPES_EN = TYPES_L.en;
 function letters(n) {
@@ -970,11 +974,91 @@ function tokensOfName(name) {
   if (toks.length > 1) for (const t of toks) if (t.replace(/[^\p{L}]/gu, '').length >= 4) vars.push(t);
   return vars;
 }
+/* ---------- Adresses postales (fr, en, es, pt, de, ru, zh) ---------- */
+function caseForms(words) {
+  const s = new Set();
+  for (const w of words) { s.add(w); s.add(w.charAt(0).toUpperCase() + w.slice(1)); s.add(w.toUpperCase()); }
+  return [...s];
+}
+const altWords = words => caseForms(words).sort((a, b) => b.length - a.length).map(escapeRe).join('|');
+const ciAll = f => Array.from(f).map(c => {
+  if (c === ' ') return '\\s+';
+  const lo = c.toLowerCase(), up = c.toUpperCase();
+  return lo !== up ? `[${lo}${up}]` : escapeRe(c);
+}).join('');
+const firstCI = frags => frags.map(ciAll).join('|');
+
+const A_TOK = "(?:\\p{Lu}\\p{Ll}{0,3}\\.|\\p{Lu}[\\p{L}'’\\-]*|\\d{1,3}(?:er|e|ème|º|ª)?(?![\\p{L}\\p{N}]))";
+const A_CONN = "(?:de la|de l['’]|du|des|de|d['’]|del|de los|de las|da|do|das|dos|di|la|le|les|el|los|las|am|an der|auf dem|zur|zum|sur|en)";
+const A_LEAD = "(?:(?:de la|de los|de las|del|du|des|de|da|do|das|dos|di|la|le|les|el|los|las)\\s+|d['’]|l['’])?";
+const A_NAME = `${A_LEAD}${A_TOK}(?:(?:\\s+${A_CONN}\\s+|\\s+)${A_TOK}){0,5}`;
+const A_NUM = "(?:(?:n°|N°|no\\.?|No\\.?|nº|Nº|núm\\.?|num\\.?|numéro|número|№|#)\\s*)?\\d{1,5}(?:\\s?(?:bis|ter|quater))?[A-Za-z]?(?:[-/]\\d{1,4})?(?![\\p{L}\\p{N}])";
+const A_POST = "(?:,?\\s+\\d{4,5}(?:-\\d{3,4})?(?:\\s+\\p{Lu}[\\p{L}'’\\-]+(?:[ \\-]\\p{Lu}[\\p{L}'’\\-]+){0,2})?)?";
+const A_STOPW = "(?:M\\.|Mr|Mrs|Ms|Mme|Mlle|Monsieur|Madame|Herr|Frau|Sr|Sra|Dr|RCCM|NIF|Id|Tél|Tel|Tlf|Fax|E-?mail|Email|Capital|Contact|Phone|Mob|Attn|Att|ИНН)";
+const A_SEG = `,\\s*(?!Représent|Represent|Vertreten|Representad|${A_STOPW}(?![\\p{L}]))(?:\\p{Lu}[\\p{L}\\p{N}'’.\\-]*|\\d[\\p{L}\\d\\-]*|BP|B\\.P\\.)(?:[ \\u00a0]+(?:-[ \\u00a0]+)?(?:\\p{Lu}[\\p{L}\\p{N}'’\\-]*|\\d[\\p{L}\\d\\-]*|de|du|des|la|le|les|d['’]|l['’]|del|da|do|dos|das|di|von|van|am|an|im|sur|en))*`;
+const A_CONT = `(?:${A_SEG}){0,4}`;
+
+const ST_FR = altWords(['avenue', 'av.', 'boulevard', 'bd.', 'bd', 'blvd.', 'rue', 'chaussée', 'place', 'allée', 'impasse', 'quai', 'route', 'chemin', 'cours', 'square', 'passage', 'résidence', 'immeuble', 'cité', 'lotissement', 'quartier', 'zone', 'commune', 'village', 'territoire', 'parcelle']);
+const ST_ES = altWords(['calle', 'c/', 'avenida', 'avda.', 'av.', 'paseo', 'plaza', 'pza.', 'camino', 'carretera', 'ctra.', 'ronda', 'travesía', 'urbanización', 'urb.', 'barrio', 'colonia', 'col.']);
+const ST_PT = altWords(['rua', 'r.', 'avenida', 'av.', 'travessa', 'tv.', 'alameda', 'largo', 'estrada', 'praça', 'praca', 'rodovia', 'bairro', 'quadra']);
+const ST_EN = "(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Lane|Ln|Drive|Dr|Way|Court|Ct|Place|Pl|Square|Sq|Close|Crescent|Terrace|Highway|Hwy|Parkway|Pkwy|Mews|Gardens|Row|Park|Plaza|Circle)";
+const BEF = "(?<![\\p{L}\\p{N}])";
+const RE_ADDR_FR1 = new RegExp(`${BEF}\\d{1,5}(?:\\s?(?:bis|ter))?,?\\s+(?:${ST_FR})\\s+${A_NAME}${A_POST}${A_CONT}`, 'gu');
+const RE_ADDR_FR2 = new RegExp(`${BEF}(?:${ST_FR})\\s+${A_NAME}(?:,?\\s*${A_NUM}${A_POST}${A_CONT}|${A_SEG}${A_CONT})`, 'gu');
+const RE_ADDR_EN = new RegExp(`${BEF}\\d{1,5}[A-Za-z]?\\s+(?:\\p{Lu}[\\p{L}'’\\-]*\\s+){1,4}?${ST_EN}\\.?(?![\\p{L}])(?:\\s+(?:N|S|E|W|NE|NW|SE|SW)(?![\\p{L}]))?(?:,?\\s*(?:Suite|Ste|Unit|Apt|Apartment|Floor|Fl|Room|Building|Bldg)\\.?\\s*[\\w\\-]+)?${A_CONT}`, 'gu');
+const RE_ADDR_ES = new RegExp(`${BEF}(?:${ST_ES})\\s+${A_NAME},?\\s*${A_NUM}(?:,?\\s*\\d{1,2}[ºª°]\\s*[A-Z]?)?${A_POST}${A_CONT}`, 'gu');
+const RE_ADDR_PT = new RegExp(`${BEF}(?:${ST_PT})\\s+${A_NAME},?\\s*${A_NUM}${A_POST}${A_CONT}`, 'gu');
+const RE_ADDR_DE = new RegExp(`${BEF}(?:\\p{Lu}[\\p{L}\\-]*(?:straße|strasse|str\\.|weg|platz|allee|gasse|ring|damm|ufer|chaussee|steig|markt|pfad|hof)|\\p{Lu}[\\p{L}\\-]+\\s+(?:Straße|Strasse|Str\\.|Weg|Platz|Allee|Gasse|Ring|Damm|Ufer)|(?:Am|An der|An den|Auf dem|Auf der|Zum|Zur|Im|Unter den)\\s+\\p{Lu}[\\p{L}\\-]+)\\s*\\d{1,4}[a-z]?(?:[-/]\\d{1,4})?(?![\\p{L}\\p{N}])${A_POST}${A_CONT}`, 'gu');
+const RE_ADDR_RU = /(?<![\p{L}\p{N}])(?:\d{6},\s*)?(?:(?:г\.|город)\s*\p{Lu}[\p{L}\-]+,?\s*)?(?:ул\.|улица|пр-т|пр\.|проспект|пер\.|переулок|пл\.|площадь|бул\.|бульвар|ш\.|шоссе|наб\.|набережная)\s*[\p{L}\d\-. ]{2,40}?,?\s*(?:д\.|дом)\s*\d+[\p{L}\d/\-]*(?:,?\s*(?:корп\.|корпус|к\.|стр\.|строение|кв\.|квартира|оф\.|офис|пом\.|помещение|эт\.|этаж)\s*[\p{L}\d\-]+)*/gu;
+const RE_ADDR_ZH = /(?:[\p{Script=Han}]{2,8}(?:省|自治区|特别行政区))?[\p{Script=Han}]{2,4}(?:市|州|盟)[\p{Script=Han}]{1,8}(?:区|县|旗)(?:[\p{Script=Han}\d]{1,16}?(?:路|街|大道|巷|道|村|镇|乡))?(?:\d+号(?:院)?)?(?:\d+(?:号楼|栋|幢|座|楼|层|单元))*(?:\d+室)?/gu;
+const RE_POBOX = new RegExp(`${BEF}(?:B\\.?\\s?P\\.?|P\\.?\\s?O\\.?\\s?Box|Postfach|Apartado(?:\\s+de\\s+Correos)?|Caixa\\s+Postal|а/я|абонентский\\s+ящик|邮政信箱)\\s*(?:n°|no\\.?|№|#)?\\s*\\d{1,8}(?:\\s+\\p{Lu}[\\p{L}'’\\-]+(?:\\s+\\d{1,3})?)?${A_CONT}`, 'gu');
+
+/* Adresses introduites par un libellé (« Siège social : … », « demeurant à … », « registered office at … ») */
+const AL_NOUN = firstCI(['adresse postale', 'adresse de facturation', 'adresse de livraison', 'adresse du domicile', 'adresse du siège social', 'adresse du siège', 'adresse', 'siège social', 'siège', 'domicile', 'lieu de résidence', 'résidence',
+  'address', 'registered office', 'registered address', 'business address', 'mailing address', 'residential address', 'principal place of business', 'residence',
+  'dirección postal', 'dirección', 'domicilio social', 'domicilio', 'sede social', 'sede', 'endereço', 'morada', 'domicílio', 'residência',
+  'anschrift', 'geschäftsanschrift', 'wohnanschrift', 'hauptsitz', 'wohnsitz', 'sitz',
+  'адрес регистрации', 'адрес места жительства', 'юридический адрес', 'почтовый адрес', 'место нахождения', 'местонахождение', 'адрес']);
+const AL_VERB = firstCI(['demeurant', 'domicilié', 'domiciliée', 'domiciliés', 'domiciliées', 'résidant', 'sis', 'sise', 'situé', 'située', 'établi', 'établie', 'ayant son siège social', 'ayant son siège',
+  'residing', 'resident', 'domiciled', 'located', 'situated', 'with its registered office', 'having its registered office',
+  'con domicilio social', 'con domicilio', 'residente', 'domiciliado', 'domiciliada', 'con sede', 'com sede', 'sediada', 'sediado',
+  'wohnhaft', 'ansässig', 'mit Sitz', 'проживающий', 'проживающая', 'зарегистрирован', 'зарегистрирована']);
+const SEP_COLON = "\\s*[:：]\\s*";
+const PREP = "(?:à|au|aux|en|dans|chez|at|in|na|no|nas|nos|em|im|am|an|auf|в|на|по\\s+адресу)";
+const SEP_PREP = `\\s+(?:(?:est|is|sont|es|ist)\\s+)?(?:(?:situé|située|situés|situées|établi|établie|sis|sise|fixé|fixée|located|situated|established|ubicad[oa]|situad[oa]|gelegen)\\s+)?${PREP}\\s*:?\\s*`;
+const VERB_PREP = `\\s+${PREP}\\s*:?\\s*`;
+const ADDR_END = "(?=\\s*(?:[\\n;。]|$)|\\.\\s*(?:\\n|$)|\\.\\s+\\p{Lu}\\p{Ll}+\\s+\\p{Ll}|(?<=\\p{L}{4}|\\d)\\.\\s+\\p{Lu}[\\p{L}\\-]{2,}(?=[\\s:.])|\\s*\\((?:ci-après|ci-dessous|hereinafter|[\"«“])"
+  + "|,?\\s+(?:(?:est|sont|is|are|está|están|es|é|são|ist|sind|wird|werden)\\s+)?(?:représentée?s?|représentant|immatriculée?s?|inscrite?s?|enregistrée?s?|identifiée?s?|ci-après|ci-dessous|dont|ayant|agissant|titulaire|née?\\s+le|RCCM|NIF|represented|registered\\s+under|incorporated|hereinafter|acting|duly|vertreten|eingetragen|handelnd|representad[oa]s?|inscrit[oa]s?|identificad[oa]s?|registad[oa]s?|doravante|neste\\s+ato|в\\s+лице|именуем\\p{L}*|зарегистрирован\\p{L}*|ИНН|ОГРН|et\\s+(?:Madame|Monsieur|Mme|M\\.)|and\\s+(?:Mr|Mrs|Ms|Dr)|und\\s+(?:Herr|Frau))(?![\\p{L}\\p{N}]))";
+const RE_AL_NOUN = new RegExp(`${BEF}(?:${AL_NOUN})(?:${SEP_COLON}|${SEP_PREP})(?<body>[^\\n;。]{4,160}?)${ADDR_END}`, 'gu');
+const RE_AL_VERB = new RegExp(`${BEF}(?:${AL_VERB})${VERB_PREP}(?<body>[^\\n;。]{4,160}?)${ADDR_END}`, 'gu');
+const RE_AL_ZH = /(?:注册地址|办公地址|通讯地址|联系地址|营业地址|经营地址|住所地|住所|住址|居住地|地址|位于)(?:为|是)?\s*[:：]?\s*(?<body>[^\n；;。，,（(]{4,60})/gu;
+
+/* ---------- Numéros et références (factures, dossiers, billets, comptes, séries…) ---------- */
+const NUM_LABELS = [
+  'numéro de série', 'n° de série', 'numéro de facture', 'numéro de dossier', 'numéro de compte', 'numéro de contrat', 'numéro de police', 'numéro de commande', 'numéro de billet', 'numéro de client', 'numéro de référence', 'numéro',
+  'facture', 'bon de commande', 'bon de livraison', 'commande', 'dossier', 'contrat', 'police', 'compte', 'série', 'immatriculation', 'plaque', 'matricule', 'référence', 'réf', 'billet', 'ticket', 'réservation', 'code', 'certificat', 'attestation', 'permis', 'licence', 'devis', 'colis', 'suivi', 'vol', 'client', 'abonné', 'adhérent', 'sinistre', 'réclamation', 'jugement', 'arrêt', 'ordonnance', 'récépissé', 'reçu',
+  'serial number', 'serial no', 'account number', 'invoice number', 'order number', 'reference number', 'customer number', 'policy number', 'case number', 'file number', 'ticket number', 'tracking number', 'number', 'invoice', 'purchase order', 'order', 'file', 'case', 'claim', 'contract', 'policy', 'account', 'acct', 'serial', 'registration', 'plate', 'license', 'licence', 'reference', 'ref', 'booking', 'reservation', 'confirmation', 'certificate', 'permit', 'quote', 'tracking', 'parcel', 'shipment', 'flight', 'customer', 'member', 'membership', 'employee', 'student', 'badge', 'docket', 'receipt', 'voucher', 'S/N', 'SN', 'PNR', 'IMEI', 'VIN', 'PO',
+  'número de serie', 'número de série', 'número de factura', 'número de cuenta', 'número', 'factura', 'pedido', 'orden', 'expediente', 'póliza', 'cuenta', 'serie', 'matrícula', 'referencia', 'boleto', 'billete', 'entrada', 'reserva', 'código', 'certificado', 'permiso', 'licencia', 'presupuesto', 'envío', 'vuelo', 'cliente', 'socio', 'siniestro', 'recibo',
+  'número de fatura', 'fatura', 'ordem', 'processo', 'apólice', 'conta', 'referência', 'bilhete', 'licença', 'orçamento', 'encomenda', 'voo', 'sinistro',
+  'rechnungsnummer', 'auftragsnummer', 'kontonummer', 'seriennummer', 'kundennummer', 'vorgangsnummer', 'mitgliedsnummer', 'sendungsnummer', 'bestellnummer', 'vertragsnummer', 'aktenzeichen', 'nummer', 'nr', 'rechnung', 'auftrag', 'vertrag', 'konto', 'kennzeichen', 'referenz', 'buchung', 'bestellung', 'flug', 'zertifikat', 'lizenz', 'angebot', 'az',
+  'серийный номер', 'регистрационный номер', 'номер счёта', 'номер счета', 'номер', 'счёт-фактура', 'счет-фактура', 'счёт', 'счет', 'договор', 'заказ-наряд', 'заказ', 'накладная', 'дело', 'полис', 'серия', 'госномер', 'билет', 'заявка', 'артикул', 'код', 'сертификат', 'лицензия', 'рейс', 'клиент', 'квитанция', 'акт',
+  '订单编号', '合同编号', '发票号码', '合同号', '订单号', '发票号', '序列号', '车牌号', '客户号', '保单号', '航班号', '流水号', '参考号', '编号', '号码', '账号', '证号', '案号', '票号', '单号', '工号', '学号'
+].sort((a, b) => b.length - a.length);
+const NUM_LABEL_RE = firstCI(NUM_LABELS);
+const RE_NUM_LABEL = new RegExp(`${BEF}(?:${NUM_LABEL_RE})(?:\\s+(?:n°|no\\.?|nº|n\\.º|num\\.?|number|numéro|nummer|nr\\.?|número|номер|№))?\\s*[:：#.]?\\s*(?<val>(?=[^\\s,;)]*\\d)[A-Za-z0-9][A-Za-z0-9\\-/._#]{1,28}[A-Za-z0-9])`, 'gu');
+const RE_NUM_SIGN = /(?<![\p{L}\p{N}])(?:n°|N°|No\.?|Nº|nº|n\.º|№|Nr\.?|Num\.?)\s*[:：]?\s*(?<val>(?=[^\s,;)]*\d)[A-Za-z0-9][A-Za-z0-9\-/._#]{1,28}[A-Za-z0-9])/gu;
+const RE_NUM_LONG = /(?<![\p{L}\p{N}.,/\-])\d{7,}(?![\p{L}\p{N}])/gu;
+const RE_NUM_GROUPS = /(?<![\p{L}\p{N}])\d{4}(?:[ \-]\d{4}){2,4}(?:[ \-]\d{1,4})?(?![\p{L}\p{N}])/gu;
+const RE_NUM_CODE1 = /(?<![\p{L}\p{N}])[A-Z]{2,6}[-/]\d{3,}(?:[-/][A-Z0-9]+)*(?![\p{L}\p{N}])/gu;
+const RE_NUM_CODE3 = /(?<![\p{L}\p{N}])[A-Z]{1,3}\d{5,}[A-Z0-9]*(?![\p{L}\p{N}])/gu;
+const RE_NUM_CODE4 = /(?<![\p{L}\p{N}])(?!\d{4}-\d{2}-\d{2}(?![\p{N}]))\d{3,}[-/]\d{2,}(?:[-/]\d+)+(?![\p{L}\p{N}])/gu;
+const NOT_A_NUMBER = /^(?:(?:19|20)\d{2}|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})$/;
+
 function detect(text, opt) {
   const o = opt || {};
   const langs = (o.langs && o.langs.length) ? o.langs : detectLanguages(text);
   setStopLangs(langs);
-  const found = new Map(), spans = [];
+  const found = new Map(), spans = [], weak = [];
   const overlaps = (s, e) => spans.some(([a, b]) => s < b && e > a);
   const push = (type, variants, conf, key, idx) => {
     const k = type + '|' + norm(key);
@@ -989,13 +1073,36 @@ function detect(text, opt) {
   const claim = (m, type, variants, conf, key) => {
     const s = m.index, e = s + m[0].length;
     if (overlaps(s, e)) return false;
-    spans.push([s, e]);
+    spans.push([s, e, conf === 'medium']);
+    if (conf === 'medium') weak.push([s, e, type + '|' + norm(key || m[0])]);
     push(type, variants, conf, key || m[0], s);
     return true;
   };
+  const addrSpans = [], simpleSpans = [], numSpans = [];
+  if (o.address !== false) {
+    const take = (s, raw, labeled) => {
+      const txt = raw.replace(/[\s,.;:)\]»”"']+$/u, '');
+      if (txt.length < 4) return;
+      const e = s + txt.length;
+      if (!labeled && addrSpans.some(a => s >= a.s && e <= a.e)) return;   // déjà couvert par une adresse plus complète
+      if (overlaps(s, e)) return;
+      spans.push([s, e]); addrSpans.push({ s, e, key: txt }); push('address', [txt], 'high', txt, s);
+    };
+    for (const re of [RE_AL_NOUN, RE_AL_VERB, RE_AL_ZH]) {
+      for (const m of text.matchAll(re)) {
+        const body = m.groups.body;
+        if (!/[\p{Lu}\d\p{Script=Han}]/u.test(body) || /@/.test(body)) continue;
+        take(m.index + m[0].length - body.length, body, true);
+      }
+    }
+    for (const re of [RE_POBOX, RE_ADDR_FR1, RE_ADDR_FR2, RE_ADDR_EN, RE_ADDR_ES, RE_ADDR_PT, RE_ADDR_DE, RE_ADDR_RU])
+      for (const m of text.matchAll(re)) take(m.index, m[0], false);
+    for (const m of text.matchAll(RE_ADDR_ZH)) { const nm = zhStripLead(m[0]); take(m.index + m[0].length - nm.length, nm, false); }
+  }
   if (o.org !== false) {
     for (const m of text.matchAll(RE_LEGAL)) {
       const full = m[0], seq = m[1], lf = m[2], stripped = stripStart(seq);
+      if (overlaps(m.index, m.index + full.length)) continue;
       const vars = [full];
       if (stripped !== seq) vars.push(stripped + ' ' + lf);
       if (stripped.length >= 3 && !isStop(stripped)) vars.push(stripped);
@@ -1038,18 +1145,46 @@ function detect(text, opt) {
     for (const re of [RE_CAPS1, RE_CAPS2]) mk(re, 'medium', true);
     for (const re of [RE_INIT1, RE_INIT2]) mk(re, 'medium', true);
   }
+  const hit = (list, s, e) => list.some(a => (Array.isArray(a) ? s < a[1] && e > a[0] : s < a.e && e > a.s));
   const simple = (on, type, re, conf) => {
     if (on === false) return;
-    for (const m of text.matchAll(re)) push(type, [m[0]], conf || 'high', m[0], m.index);
+    for (const m of text.matchAll(re)) {
+      const s = m.index, e = s + m[0].length;
+      if (hit(addrSpans, s, e) || hit(numSpans, s, e)) continue;
+      simpleSpans.push([s, e]);
+      push(type, [m[0]], conf || 'high', m[0], s);
+    }
   };
   simple(o.email, 'email', RE_EMAIL);
   simple(o.url, 'url', RE_URL);
   simple(o.id, 'id', RE_ID1); simple(o.id, 'id', RE_ID2); simple(o.id, 'id', RE_ID_NAT);
   simple(o.id, 'id', RE_ID_RU); simple(o.id, 'id', RE_ID_ZH); simple(o.id, 'id', RE_SWIFT);
   simple(o.iban, 'iban', RE_IBAN); simple(o.iban, 'iban', RE_BANK);
+  /* Numéros introduits par un libellé (facture, dossier, billet, compte, série…) : prioritaires sur les téléphones */
+  const freeSpan = (s, e) => !spans.some(([a, b, w]) => !w && s < b && e > a) && !hit(simpleSpans, s, e) && !hit(addrSpans, s, e);
+  const addNumber = (s, v) => {
+    if (NOT_A_NUMBER.test(v) || !/\d/.test(v)) return;
+    const e = s + v.length;
+    if (!freeSpan(s, e)) return;
+    simpleSpans.push([s, e]);
+    for (const [a, b, k] of weak) if (s < b && e > a) found.delete(k);   // une détection faible (nom probable) cède devant un numéro
+    push('number', [v], 'high', v, s);
+    return e;
+  };
+  if (o.number !== false) {
+    for (const re of [RE_NUM_LABEL, RE_NUM_SIGN]) {
+      for (const m of text.matchAll(re)) {
+        const raw = m.groups.val, v = raw.replace(/[.\-/_#]+$/, ''), s = m.index + m[0].length - raw.length;
+        if (addNumber(s, v)) numSpans.push([s, s + v.length]);
+      }
+    }
+  }
   simple(o.phone, 'phone', RE_PHONE, 'medium');
   for (const re of [RE_AMOUNT1, RE_AMOUNT2, RE_AMOUNT3]) simple(o.amount === true, 'amount', re);
   for (const re of [RE_DATE1, RE_DATE_EN, RE_DATE2, RE_DATE_ISO, RE_DATE_ZH]) simple(o.date === true, 'date', re);
+  if (o.number !== false) {
+    for (const re of [RE_NUM_LONG, RE_NUM_GROUPS, RE_NUM_CODE1, RE_NUM_CODE3, RE_NUM_CODE4]) for (const m of text.matchAll(re)) addNumber(m.index, m[0]);
+  }
   const all = Array.from(found.values());
   const sure = new Set();
   for (const e of all) if (e.conf === 'high') for (const v of e.variants) sure.add(norm(v));
@@ -1202,6 +1337,8 @@ const I18N_DATA = [
   ['opt.org', 'Sociétés (SARL, SA, GmbH, Ltd, S.L., ООО, 有限公司…)', 'Companies (SARL, SA, GmbH, Ltd, S.L., ООО, 有限公司…)'],
   ['opt.person', 'Personnes (titres de civilité, initiales, noms en majuscules…)', 'People (titles, initials, capitalised surnames…)'],
   ['opt.email', 'Adresses e-mail', 'Email addresses'],
+  ['opt.address', 'Adresses (siège social, domicile, résidence, boîte postale…)', 'Addresses (registered office, home, residence, P.O. box…)'],
+  ['opt.number', 'Numéros et références (factures, billets, dossiers, comptes, séries…)', 'Numbers and references (invoices, tickets, files, accounts, serial numbers…)'],
   ['opt.phone', 'Numéros de téléphone', 'Phone numbers'],
   ['opt.id', 'Identifiants (RCCM, NIF, DNI, CPF, ИНН, 身份证…)', 'Identifiers (RCCM, NIF, DNI, CPF, ИНН, 身份证…)'],
   ['opt.iban', 'Comptes bancaires (IBAN)', 'Bank accounts (IBAN)'],
@@ -1243,6 +1380,8 @@ const I18N_DATA = [
   ['occ.many', '{n} occurrences', '{n} occurrences'],
   ['type.person', 'Personne', 'Person'],
   ['type.org', 'Société / organisation', 'Company / organisation'],
+  ['type.address', 'Adresse', 'Address'],
+  ['type.number', 'Numéro / référence', 'Number / reference'],
   ['type.other', 'Autre terme', 'Other term'],
   ['type.email', 'E-mail', 'Email'],
   ['type.phone', 'Téléphone', 'Phone'],
@@ -1449,6 +1588,7 @@ const I18N_DATA = [
   ['sec.gl.3', "ANONYX produit une pseudonymisation. Supprimez toutes les tables (coffre et fichiers exportés) pour vous rapprocher d'une anonymisation, et relisez toujours le résultat.", 'ANONYX produces pseudonymisation. Delete all tables (vault and exported files) to get closer to anonymisation, and always review the result.'],
   ['sec.lim.t', 'Limites connues', 'Known limitations'],
   ['sec.lim.1', "La détection automatique n'est pas infaillible. Elle est la plus complète en français ; en anglais, espagnol, portugais, allemand, russe et chinois, elle couvre les formes courantes (sociétés, titres de civilité, identifiants, montants, dates). Relisez toujours le résultat avant tout dépôt.", 'Automatic detection is not infallible. It is most complete in French; in English, Spanish, Portuguese, German, Russian and Chinese it covers the common forms (companies, titles, identifiers, amounts, dates). Always review the result before sharing it.'],
+  ['sec.lim.7', "Adresses et numéros : ils sont repérés lorsqu'ils suivent un libellé (« Siège social : », « Facture n° ») ou ont une forme reconnaissable. Un numéro court isolé, sans libellé, n'est pas détecté ; une adresse écrite sans nom de voie ni libellé non plus.", 'Addresses and numbers: they are found when they follow a label (“Registered office:”, “Invoice No.”) or have a recognisable form. A short number with no label, or an address written without a street name or label, is not detected.'],
   ['sec.lim.5', "Chinois : les noms de personnes sont repérés surtout lorsqu'ils sont suivis d'un titre (先生, 女士…) ou précédés d'une étiquette (姓名：…). Russe : les déclinaisons des noms déjà repérés sont reconnues. PDF chinois utilisant des polices non intégrées : le texte peut être illisible.", 'Chinese: personal names are mainly found when followed by a title (先生, 女士…) or preceded by a label (姓名：…). Russian: declined forms of names already found are recognised. Chinese PDFs using non-embedded fonts: the text may be unreadable.'],
   ['sec.lim.6', "Allemand : les noms communs prennent une majuscule, la liste de contrôle complémentaire est donc plus longue.", 'German: common nouns are capitalised, so the additional check list is longer.'],
   ['sec.lim.2', "Les PDF doivent contenir du texte sélectionnable : un PDF numérisé (simple image) n'est pas lisible sans reconnaissance de caractères (OCR). Le texte des images n'est pas traité.", 'PDFs must contain selectable text: a scanned PDF (plain image) cannot be read without optical character recognition (OCR). Text inside images is not processed.'],
@@ -1925,6 +2065,7 @@ function analyze() {
   const manualKeys = new Set(manual.flatMap(i => i.variants.map(norm)));
   const opt = {
     org: $('#o-org').checked, person: $('#o-person').checked, email: $('#o-email').checked, phone: $('#o-phone').checked,
+    address: $('#o-address').checked, number: $('#o-number').checked,
     id: $('#o-id').checked, iban: $('#o-iban').checked, url: $('#o-url').checked, amount: $('#o-amount').checked, date: $('#o-date').checked
   };
   const order = Object.keys(TYPES);
@@ -2566,7 +2707,7 @@ function renderSecurity() {
   <div class="card"><h2>${esc(t('sec.sess.t'))}</h2><p style="margin:0">${esc(t('sec.sess.b'))}</p></div>
   <div class="card"><h2>${esc(t('sec.cache.t'))}</h2><p>${esc(t('sec.cache.b'))}</p><div class="row" style="margin-top:0"><button class="btn sec" type="button" data-sec="cache">${esc(t('sec.cache.clear'))}</button></div></div>
   <div class="card"><h2>${esc(t('sec.gl.t'))}</h2><p>${esc(t('sec.gl.1'))}</p><p>${esc(t('sec.gl.2'))}</p><p style="margin:0">${esc(t('sec.gl.3'))}</p></div>
-  <div class="card"><h2>${esc(t('sec.lim.t'))}</h2><ul style="margin:0;padding-left:20px"><li>${esc(t('sec.lim.1'))}</li><li>${esc(t('sec.lim.2'))}</li><li>${esc(t('sec.lim.3'))}</li><li>${esc(t('sec.lim.4'))}</li><li>${esc(t('sec.lim.5'))}</li><li>${esc(t('sec.lim.6'))}</li></ul></div>
+  <div class="card"><h2>${esc(t('sec.lim.t'))}</h2><ul style="margin:0;padding-left:20px"><li>${esc(t('sec.lim.1'))}</li><li>${esc(t('sec.lim.2'))}</li><li>${esc(t('sec.lim.3'))}</li><li>${esc(t('sec.lim.4'))}</li><li>${esc(t('sec.lim.5'))}</li><li>${esc(t('sec.lim.7'))}</li><li>${esc(t('sec.lim.6'))}</li></ul></div>
   <div class="card"><h2>${esc(t('sec.wipe.t'))}</h2><p>${esc(t('sec.wipe.b'))}</p><div class="row" style="margin-top:0"><button class="btn danger" type="button" data-sec="wipe">${esc(t('sec.wipe.btn'))}</button></div></div>`;
 }
 async function clearOfflineCache() {

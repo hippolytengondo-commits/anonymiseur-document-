@@ -12,7 +12,7 @@ Application web **100 % locale** (PWA, un seul fichier HTML) qui pseudonymise de
 - Interface **bilingue FR/EN** : tout texte visible passe par `t('clé')` (`src/i18n.js`). Le build échoue si une clé manque dans une langue. Ton très professionnel.
 
 ## Structure
-- `src/engine.js` : lecture/écriture .docx (ZIP maison), détection **multilingue (fr, en, es, pt, de, ru, zh)** avec reconnaissance de la langue du document, remplacement (écritures sans espaces, déclinaisons russes), désignations dans les 7 langues. Moteur éprouvé : ne le modifier qu'avec tests (`test/unit.js`, `test/intl.js`).
+- `src/engine.js` : lecture/écriture .docx (ZIP maison), détection **multilingue (fr, en, es, pt, de, ru, zh)** (sociétés, personnes, **adresses**, **numéros et références**, identifiants, comptes, téléphones, montants, dates) avec reconnaissance de la langue du document, remplacement (écritures sans espaces, déclinaisons russes), désignations dans les 7 langues. Moteur éprouvé : ne le modifier qu'avec tests (`test/unit.js`, `test/intl.js`).
 - `src/i18n.js` : dictionnaire `[clé, français, anglais]`, `t()`, `applyI18n()`.
 - `src/store.js` : préférences, historique (métadonnées), journal, coffre chiffré, neutralisation CSV.
 - `src/app.js` : espace d'anonymisation et de restauration (import PDF/Word/texte, contrôle, export, PDF via pdf.js et pdf-lib).
@@ -28,4 +28,4 @@ Application web **100 % locale** (PWA, un seul fichier HTML) qui pseudonymise de
 - Après toute modification : `node build.js`, lancer `test/run_all.sh`, commit (y compris `index.html`, `manifest.webmanifest`, `sw.js` régénérés), push. La CI refuse un `index.html` qui ne correspond pas aux sources.
 
 ## Pistes d'amélioration
-- OCR pour les PDF numérisés (hors ligne), conservation de la mise en page PDF, glossaire de noms réutilisable, adresses postales, polices Unicode pour l'export PDF en russe/chinois, cartes de caractères CJK pour les PDF chinois, comptes et licences (nécessitent un serveur : décision à valider).
+- OCR pour les PDF numérisés (hors ligne), conservation de la mise en page PDF, glossaire de noms réutilisable, adresses sans libellé ni nom de voie, polices Unicode pour l'export PDF en russe/chinois, cartes de caractères CJK pour les PDF chinois, comptes et licences (nécessitent un serveur : décision à valider).

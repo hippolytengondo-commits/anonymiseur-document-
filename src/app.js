@@ -248,6 +248,7 @@ function analyze() {
   const manualKeys = new Set(manual.flatMap(i => i.variants.map(norm)));
   const opt = {
     org: $('#o-org').checked, person: $('#o-person').checked, email: $('#o-email').checked, phone: $('#o-phone').checked,
+    address: $('#o-address').checked, number: $('#o-number').checked,
     id: $('#o-id').checked, iban: $('#o-iban').checked, url: $('#o-url').checked, amount: $('#o-amount').checked, date: $('#o-date').checked
   };
   const order = Object.keys(TYPES);

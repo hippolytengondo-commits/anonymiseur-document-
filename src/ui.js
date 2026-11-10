@@ -335,7 +335,7 @@ function renderSecurity() {
   <div class="card"><h2>${esc(t('sec.sess.t'))}</h2><p style="margin:0">${esc(t('sec.sess.b'))}</p></div>
   <div class="card"><h2>${esc(t('sec.cache.t'))}</h2><p>${esc(t('sec.cache.b'))}</p><div class="row" style="margin-top:0"><button class="btn sec" type="button" data-sec="cache">${esc(t('sec.cache.clear'))}</button></div></div>
   <div class="card"><h2>${esc(t('sec.gl.t'))}</h2><p>${esc(t('sec.gl.1'))}</p><p>${esc(t('sec.gl.2'))}</p><p style="margin:0">${esc(t('sec.gl.3'))}</p></div>
-  <div class="card"><h2>${esc(t('sec.lim.t'))}</h2><ul style="margin:0;padding-left:20px"><li>${esc(t('sec.lim.1'))}</li><li>${esc(t('sec.lim.2'))}</li><li>${esc(t('sec.lim.3'))}</li><li>${esc(t('sec.lim.4'))}</li><li>${esc(t('sec.lim.5'))}</li><li>${esc(t('sec.lim.6'))}</li></ul></div>
+  <div class="card"><h2>${esc(t('sec.lim.t'))}</h2><ul style="margin:0;padding-left:20px"><li>${esc(t('sec.lim.1'))}</li><li>${esc(t('sec.lim.2'))}</li><li>${esc(t('sec.lim.3'))}</li><li>${esc(t('sec.lim.4'))}</li><li>${esc(t('sec.lim.5'))}</li><li>${esc(t('sec.lim.7'))}</li><li>${esc(t('sec.lim.6'))}</li></ul></div>
   <div class="card"><h2>${esc(t('sec.wipe.t'))}</h2><p>${esc(t('sec.wipe.b'))}</p><div class="row" style="margin-top:0"><button class="btn danger" type="button" data-sec="wipe">${esc(t('sec.wipe.btn'))}</button></div></div>`;
 }
 async function clearOfflineCache() {
