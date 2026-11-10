@@ -2,7 +2,7 @@
 const $ = (s, r) => (r || document).querySelector(s);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MIME = { docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', txt: 'text/plain;charset=utf-8', pdf: 'application/pdf' };
-const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null, histId: null, step: 1, restored: null, langs: [], rMap: null, rDoc: null };
+const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null, histId: null, step: 1, restored: null, langs: [], rMap: null, rDocs: [], rResults: [], pinned: null };
 
 function say(id, text, cls) {
   const el = $(id);
@@ -420,10 +420,23 @@ function run() {
     refreshMapChoices();
     setStep(4);
     if (!state.histId) state.histId = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    afterRun(state.result, state.histId);
     histUpsert({ id: state.histId, ts: Date.now(), name: prefs.keepNames ? state.name : '', kind: state.kind, replacements: total, designations: mapping.entries.length, residual: left });
     logActivity('apply', { r: total, n: mapping.entries.length });
     return true;
   } catch (e) { say('#m3', t('err.generic', { m: e.message || e }), 'err'); return false; }
+}
+/* Conservation automatique de la table (chiffrée par une clé de l'appareil) avec l'empreinte du document anonymisé */
+async function afterRun(r, hid) {
+  const note = $('#auto-note');
+  note.textContent = '';
+  r.fp = await fingerprint(r.d.text);
+  if (!prefs.autoSave) return;
+  try {
+    await autoAdd(r.mapping, r.fp, hid);
+    histUpsert({ id: hid, mapId: r.mapping.id });
+    if (state.result === r) note.textContent = t('dl.autoSaved');
+  } catch (e) { if (state.result === r) note.textContent = t('dl.autoSaveFail'); }
 }
 $('#run').addEventListener('click', () => { if (run()) $('#s4').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 $('#residual').addEventListener('click', e => {
@@ -457,6 +470,10 @@ function vaultErr(e) {
   if (m === 'locked') return t('vt.needOpen');
   return t('err.generic', { m: m || e });
 }
+function autoName(m) {
+  const h = histAll().find(x => x.id === m.hid);
+  return (h && h.name) || m.label || t('docs.untitled', { date: new Date(m.created).toLocaleDateString(locale()) });
+}
 function mapDocName(m) {
   const h = histAll().find(x => x.mapId === m.id);
   return (h && h.name) || m.label || t('docs.untitled', { date: new Date(m.created).toLocaleDateString(locale()) });
@@ -473,7 +490,8 @@ $('#save-map').addEventListener('click', async () => {
 });
 function refreshMapChoices() {
   const box = $('#map-choices');
-  const sel = (box.querySelector('input:checked') || {}).value || window.pendingMap;
+  if (window.pendingMap) { state.pinned = window.pendingMap; window.pendingMap = null; }
+  const sel = state.pinned || (box.querySelector('input:checked') || {}).value;
   setTimeout(showRFiles, 0);
   const opts = [];
   if (state.result) opts.push({ v: 'session', t: t('rs.session', { doc: state.result.mapping.document, n: state.result.mapping.entries.length }) });
@@ -483,6 +501,8 @@ function refreshMapChoices() {
     else locked = true;
   }
   const legacy = legacyTables();
+  const sessId = state.result && state.result.mapping.id;
+  for (const m of autoList()) if (m.id !== sessId) opts.push({ v: 'auto:' + m.id, t: t('rs.autoItem', { doc: autoName(m), date: new Date(m.created).toLocaleString(locale()) }) });
   for (const m of legacy) opts.push({ v: 'legacy:' + m.id, t: t('rs.legacyItem', { doc: m.document || t('doc.generic'), date: m.created ? new Date(m.created).toLocaleString(locale()) : '' }) });
   let html = opts.map((o, i) => `<label class="radio"><input type="radio" name="mapsrc" value="${esc(o.v)}"${(sel ? sel === o.v : i === 0) ? ' checked' : ''}> <span>${esc(o.t)}</span></label>`).join('');
   if (legacy.length) html += `<p class="hint">${esc(t('rs.legacyHint'))}</p>`;
@@ -495,87 +515,179 @@ $('#map-choices').addEventListener('click', async e => {
 onVaultChange(() => refreshMapChoices());
 refreshMapChoices();
 
-/* ---- 5. Restauration ---- */
-async function getMapping() {
-  const f = state.rMap || $('#r-map').files[0];
-  if (f) {
-    let map;
-    try { map = JSON.parse(await f.text()); } catch (e) { throw new Error(t('err.maptype')); }
-    if (!map || !Array.isArray(map.entries)) throw new Error(t('err.maptype'));
-    return map;
-  }
-  const c = $('#map-choices input:checked');
-  if (c) {
-    if (c.value === 'session' && state.result) return state.result.mapping;
-    if (c.value.startsWith('legacy:')) {
-      const m = legacyTables().find(x => 'legacy:' + x.id === c.value);
-      if (m) return m;
-    }
-    if (c.value.startsWith('vault:')) {
-      if (!vaultOpen()) throw new Error(t('vt.needOpen'));
-      const m = await vaultGet(c.value.slice(6));
-      if (m) return m;
-    }
-  }
-  throw new Error(t('err.nomap'));
+/* ---- 5. Restauration : documents déposés + table retrouvée dans l'historique de l'appareil (ou fichier .json) ---- */
+const DOC_EXT = ['pdf', 'docx', 'txt', 'md'];
+async function fingerprint(text) {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text).replace(/\s+/g, '').toLowerCase()));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) { return ''; }
 }
-/* Choix des fichiers en un seul geste : le document et la table (.json), ensemble ou l'un après l'autre */
+async function readSource(f) {
+  const ext = extOf(f), name = safeName(f.name.replace(/\.[^.]+$/, ''));
+  if (ext === 'docx') { const ents = await unzip(await f.arrayBuffer()); return { kind: 'docx', name, ents, text: docxPartsText(ents) }; }
+  if (ext === 'pdf') { const r = await pdfToText(await f.arrayBuffer()); return { kind: 'pdf', name, text: r.text }; }
+  if (['txt', 'md'].includes(ext)) return { kind: 'txt', name, text: await f.text() };
+  throw new Error(t('err.rfmt'));
+}
+function restoreSource(src, map) {
+  const m = buildMatcher(map.entries.filter(e => e.values && e.values.length).map(e => ({ variants: [e.label], repl: e.values[0] })));
+  const n = m.fn(src.text).length;
+  if (src.kind === 'docx') { const ents = transformDocx(src.ents, m.fn, {}); return { n, d: { kind: 'docx', name: src.name, bytes: zip(ents), text: docxPartsText(ents) } }; }
+  return { n, d: { kind: src.kind, name: src.name, text: applyMatches(src.text, m.fn(src.text)) } };
+}
+async function parseMapFile(f) {
+  let map;
+  try { map = JSON.parse(await f.text()); } catch (e) { throw new Error(t('err.maptype')); }
+  if (!map || !Array.isArray(map.entries)) throw new Error(t('err.maptype'));
+  return map;
+}
+/* Tables disponibles sur l'appareil (la table de la session, l'historique automatique, le coffre ouvert, l'ancienne version) */
+async function candidateTables() {
+  const out = [], sess = state.result && state.result.mapping;
+  if (sess) out.push({ key: 'session', created: sess.created, load: async () => sess });
+  for (const m of autoList()) if (!sess || m.id !== sess.id) out.push({ key: 'auto:' + m.id, created: m.created, label: autoName(m), load: () => autoGet(m.id) });
+  if (vaultOpen()) for (const m of vaultList()) out.push({ key: 'vault:' + m.id, created: m.created, label: mapDocName(m), load: () => vaultGet(m.id) });
+  for (const m of legacyTables()) out.push({ key: 'legacy:' + m.id, created: m.created || '', label: m.document || t('doc.generic'), load: async () => m });
+  return out;
+}
+function labelScore(text, map) {
+  const labels = map.entries.map(e => e.label).filter(Boolean);
+  if (!labels.length) return 0;
+  const found = new Set(buildMatcher([{ variants: labels, repl: 1 }]).fn(text).map(x => norm(text.slice(x.start, x.end))));
+  return found.size;
+}
+/* Table la plus adaptée au texte : celle dont le plus de désignations y figurent ; à égalité, la plus récente */
+async function bestTable(cands, text, force) {
+  const scored = [];
+  for (const c of cands) {
+    let map = null;
+    try { map = await c.load(); } catch (e) { map = null; }
+    if (!map || !Array.isArray(map.entries)) continue;
+    scored.push({ c, map, k: labelScore(text, map) });
+  }
+  const ok = scored.filter(x => x.k > 0 || (force && scored.length === 1));
+  ok.sort((a, b) => b.k - a.k || String(b.c.created).localeCompare(String(a.c.created)));
+  return ok.length ? { c: ok[0].c, map: ok[0].map, k: ok[0].k, more: ok.length - 1 } : null;
+}
+const hasAnyTable = () => !!(state.result || autoList().length || vaultList().length || legacyTables().length);
 function showRFiles() {
   const rows = [];
   if (state.rMap) rows.push(['ok', t('rf.table', { f: state.rMap.name })]);
-  if (state.rDoc) rows.push(['ok', t('rf.doc', { f: state.rDoc.name })]);
-  if (state.rMap && !state.rDoc) rows.push(['warn', t('rf.needDoc')]);
-  if (state.rDoc && !state.rMap && !$('#map-choices input')) rows.push(['warn', t('rf.needTable')]);
+  for (const f of state.rDocs) rows.push(['ok', t('rf.doc', { f: f.name })]);
+  if (state.rMap && !state.rDocs.length) rows.push(['warn', t('rf.needDoc')]);
+  if (state.rDocs.length && !state.rMap && !hasAnyTable()) rows.push(['warn', t('rf.needTable')]);
   $('#r-status').innerHTML = rows.map(([c, x]) => `<div class="msg show ${c}">${esc(x)}</div>`).join('');
+  $('#r-clear').hidden = !(state.rMap || state.rDocs.length);
 }
 $('#r-files').addEventListener('change', e => {
   for (const f of e.target.files) {
     const ext = extOf(f);
-    if (ext === 'json') state.rMap = f; else if (['pdf', 'docx', 'txt', 'md'].includes(ext)) state.rDoc = f;
+    if (ext === 'json') state.rMap = f;
+    else if (DOC_EXT.includes(ext) && !state.rDocs.some(x => x.name === f.name && x.size === f.size)) state.rDocs.push(f);
   }
   e.target.value = '';
   showRFiles();
-  if (state.rDoc && (state.rMap || document.querySelectorAll('#map-choices input').length === 1)) $('#r-run').click();
+  if (state.rDocs.length && (state.rMap || hasAnyTable())) runRestore();
 });
-$('#r-run').addEventListener('click', async () => {
+$('#r-clear').addEventListener('click', () => {
+  state.rMap = null; state.rDocs = []; state.pinned = null; state.rResults = [];
+  $('#r-out').innerHTML = ''; $('#r-out').hidden = true; say('#m5', ''); showRFiles();
+});
+function howText(r) {
+  if (r.how === 'file') return t('rr.how.file');
+  if (r.how === 'orig') return t('rr.how.orig', { f: r.ref });
+  if (r.how === 'pinned') return t('rr.how.pinned', { doc: r.label || '', date: r.date });
+  return t('rr.how.auto', { doc: r.label || '', date: r.date, k: r.k });
+}
+function renderRestoreResults(results) {
+  const box = $('#r-out');
+  box.innerHTML = ''; box.hidden = !results.length;
+  state.rResults = results;
+  results.forEach((r, i) => {
+    const card = document.createElement('div');
+    card.className = 'rcard';
+    const h = document.createElement('h3'); h.textContent = r.name; card.appendChild(h);
+    if (r.none) {
+      const w = document.createElement('div'); w.className = 'msg show warn'; w.textContent = t('rr.none'); card.appendChild(w);
+      box.appendChild(card); return;
+    }
+    const note = document.createElement('p'); note.className = 'hint'; note.style.marginTop = '0'; note.textContent = howText(r); card.appendChild(note);
+    if (r.more) { const w = document.createElement('div'); w.className = 'msg show warn'; w.textContent = t('rr.more', { n: r.more }); card.appendChild(w); }
+    const pv = document.createElement('div'); pv.className = 'preview';
+    const pre = document.createElement('pre'); if (i === 0) pre.id = 'r-preview';
+    pre.textContent = previewHtml(r.d.text).slice(0, 8000) + (r.d.text.length > 8000 ? '\n\n' + t('s4.prevMore') : '');
+    pv.appendChild(pre); card.appendChild(pv);
+    const cp = document.createElement('div'); cp.className = 'row';
+    const cb = document.createElement('button'); cb.type = 'button'; cb.className = 'btn sec r-copy'; cb.dataset.i = i; cb.textContent = t('rs.copy'); cp.appendChild(cb); card.appendChild(cp);
+    const dl = document.createElement('div'); dl.className = 'row'; dl.style.marginTop = '4px'; if (i === 0) dl.id = 'r-dl'; card.appendChild(dl);
+    box.appendChild(card);
+    renderDownloads(dl, r.d, t('suffix.rest'), '#m5');
+  });
+}
+$('#r-out').addEventListener('click', async e => {
+  const b = e.target.closest('.r-copy');
+  if (!b) return;
+  const r = (state.rResults || [])[+b.dataset.i];
+  if (!r || !r.d) return;
+  try { await navigator.clipboard.writeText(r.d.text.replace(/\f/g, '\n\n')); say('#m5', t('rs.copied'), 'ok'); }
+  catch (err) { say('#m5', t('err.copy'), 'warn'); }
+});
+let restoring = false;
+async function runRestore() {
+  if (restoring) return;
+  restoring = true;
   try {
     say('#m5', t('msg.restoring'), 'ok busy');
-    const map = await getMapping();
-    const matcher = buildMatcher(map.entries.filter(e => e.values && e.values.length).map(e => ({ variants: [e.label], repl: e.values[0] })));
-    const f = state.rDoc || $('#r-doc').files[0], pasted = $('#r-paste').value;
-    let d, srcText;
-    if (f) {
-      const ext = extOf(f), base = safeName(f.name.replace(/\.[^.]+$/, ''));
-      if (ext === 'docx') {
-        const src = await unzip(await f.arrayBuffer());
-        srcText = docxPartsText(src);
-        const ents = transformDocx(src, matcher.fn, {});
-        d = { kind: 'docx', name: base, bytes: zip(ents), text: docxPartsText(ents) };
-      } else if (ext === 'pdf') {
-        const r = await pdfToText(await f.arrayBuffer());
-        srcText = r.text;
-        d = { kind: 'pdf', name: base, text: applyMatches(r.text, matcher.fn(r.text)) };
-      } else if (['txt', 'md'].includes(ext)) {
-        srcText = await f.text();
-        d = { kind: 'txt', name: base, text: applyMatches(srcText, matcher.fn(srcText)) };
-      } else throw new Error(t('err.rfmt'));
-    } else if (pasted.trim()) {
-      srcText = pasted;
-      d = { kind: 'txt', name: t('name.text'), text: applyMatches(pasted, matcher.fn(pasted)) };
-    } else throw new Error(t('err.rnone'));
-    const n = matcher.fn(srcText).length;
-    $('#r-preview').textContent = previewHtml(d.text).slice(0, 8000) + (d.text.length > 8000 ? '\n\n' + t('s4.prevMore') : '');
-    $('#r-out').hidden = false;
-    state.restored = d;
-    renderDownloads($('#r-dl'), d, t('suffix.rest'), '#m5');
-    say('#m5', n ? t('msg.restored', { n }) : t('msg.restnone'), n ? 'ok' : 'warn');
-    logActivity('restore', { n });
+    const mf = state.rMap || $('#r-map').files[0];
+    const explicit = mf ? await parseMapFile(mf) : null;
+    const files = state.rDocs.length ? state.rDocs.slice() : ($('#r-doc').files[0] ? [$('#r-doc').files[0]] : []);
+    const sources = [];
+    for (const f of files) sources.push(await readSource(f));
+    for (const s of sources) { s.fp = await fingerprint(s.text); s.refs = autoFindFps(s.fp); }
+    const refs = sources.filter(s => s.refs.length), fresh = sources.filter(s => !s.refs.length);
+    const targets = (fresh.length ? fresh : sources).slice();
+    const pasted = $('#r-paste').value;
+    if (pasted.trim()) targets.push({ kind: 'txt', name: t('name.text'), text: pasted });
+    if (!targets.length) throw new Error(t('err.rnone'));
+    const cands = explicit ? [] : await candidateTables();
+    const results = [];
+    for (const s of targets) {
+      let map = null, how = '', pick = null;
+      if (explicit) { map = explicit; how = 'file'; }
+      else {
+        const pinned = state.pinned && cands.find(c => c.key === state.pinned);
+        if (pinned) { try { map = await pinned.load(); } catch (e) { map = null; } if (map) { how = 'pinned'; pick = { c: pinned, k: labelScore(s.text, map), more: 0 }; } }
+        if (!map && refs.length) {
+          const rc = refs.flatMap(r => r.refs.map(x => ({ key: 'auto:' + x.id, created: x.created, label: autoName(x), refName: r.name, load: () => autoGet(x.id) })));
+          pick = await bestTable(rc, s.text, true) || await bestTable(rc.slice(0, 1), '', true);
+          if (pick) { map = pick.map; how = 'orig'; pick.refName = pick.c.refName; }
+        }
+        if (!map) {
+          pick = await bestTable(cands, s.text, false);
+          if (pick) { map = pick.map; how = 'auto'; }
+        }
+      }
+      if (!map) { results.push({ name: s.name, none: true }); continue; }
+      const r = restoreSource(s, map);
+      results.push({ name: s.name, d: r.d, n: r.n, how, ref: pick && pick.refName, label: pick && pick.c.label, date: pick && pick.c.created ? new Date(pick.c.created).toLocaleDateString(locale()) : '', k: pick ? pick.k : 0, more: pick ? pick.more : 0, key: pick && pick.c.key });
+    }
+    renderRestoreResults(results);
+    const used = results.find(r => r.key);
+    if (used) { const radio = document.querySelector(`#map-choices input[value="${used.key}"]`); if (radio) radio.checked = true; }
+    const done = results.filter(r => r.d), total = done.reduce((a, r) => a + r.n, 0);
+    if (!done.length) say('#m5', t('rr.none'), 'warn');
+    else if (done.length === 1) say('#m5', total ? t('msg.restored', { n: total }) : t('msg.restnone'), total ? 'ok' : 'warn');
+    else say('#m5', t('msg.restoredMulti', { n: total, f: done.length }), total ? 'ok' : 'warn');
+    logActivity('restore', { n: total });
   } catch (e) { say('#m5', t('err.generic', { m: e.message || e }), 'err'); }
-});
-$('#r-copy').addEventListener('click', async () => {
-  if (!state.restored) return;
-  try { await navigator.clipboard.writeText(state.restored.text.replace(/\f/g, '\n\n')); say('#m5', t('rs.copied'), 'ok'); }
-  catch (e) { say('#m5', t('err.copy'), 'warn'); }
+  finally { restoring = false; }
+}
+$('#r-run').addEventListener('click', runRestore);
+$('#map-choices').addEventListener('change', e => {
+  if (e.target.name !== 'mapsrc') return;
+  state.pinned = e.target.value;
+  if (state.rDocs.length || $('#r-paste').value.trim() || $('#r-doc').files[0]) runRestore();
 });
 
 // Installation (PWA) : uniquement en HTTPS ou en local ; sans effet à l'ouverture directe du fichier.

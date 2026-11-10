@@ -321,6 +321,7 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
       <button class="btn sec" id="dl-csv" type="button" data-i18n="s4.csv"></button>
     </div>
     <div class="msg" id="m4" role="status"></div>
+    <p class="hint" id="auto-note" role="status"></p>
     <p class="hint" data-i18n="s4.warn"></p>
   </section>
 </section>
@@ -337,6 +338,7 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
     <input type="file" id="r-files" multiple accept=".pdf,.docx,.txt,.md,.json,application/json">
     <p class="hint" data-i18n="rf.hint"></p>
     <div id="r-status"></div>
+    <div class="row" style="margin-top:6px"><button class="btn sec sm" id="r-clear" type="button" hidden data-i18n="rf.clear"></button></div>
     <div id="map-choices"></div>
     <details style="margin-top:12px"><summary data-i18n="rs.lost.t"></summary>
       <ul style="margin:8px 0 0;padding-left:20px"><li data-i18n="rs.lost.1"></li><li data-i18n="rs.lost.2"></li><li data-i18n="rs.lost.3"></li><li data-i18n="rs.lost.4"></li></ul></details>
@@ -350,13 +352,7 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
     </details>
     <div class="row"><button class="btn" id="r-run" type="button" data-i18n="rs.run"></button></div>
     <div class="msg" id="m5" role="status"></div>
-    <div id="r-out" hidden>
-      <h3 data-i18n="rs.out"></h3>
-      <div class="preview"><pre id="r-preview"></pre></div>
-      <div class="row"><button class="btn sec" id="r-copy" type="button" data-i18n="rs.copy"></button></div>
-      <h3 data-i18n="s4.dl"></h3>
-      <div class="row" style="margin-top:4px" id="r-dl"></div>
-    </div>
+    <div id="r-out" hidden></div>
   </section>
 </section>
 
@@ -1304,7 +1300,7 @@ const I18N_DATA = [
   ['dash.restore', 'Restaurer un document', 'Restore a document'],
   ['kpi.docs', 'Documents traités', 'Documents processed'],
   ['kpi.repl', 'Remplacements effectués', 'Replacements made'],
-  ['kpi.tables', 'Tables dans le coffre', 'Tables in the vault'],
+  ['kpi.tables', 'Tables conservées', 'Tables kept'],
   ['kpi.last', 'Dernière opération', 'Last operation'],
   ['kpi.never', 'Aucune', 'None'],
   ['prot.title', 'État de la protection', 'Protection status'],
@@ -1457,19 +1453,36 @@ const I18N_DATA = [
 
   /* Restauration */
   ['rs.title', 'Retrouver les vrais noms', 'Get the real names back'],
-  ['rs.sub', "Choisissez vos fichiers : le document qui contient les désignations (Société A, Personne B…) et la table .json téléchargée lors de l'anonymisation. La restauration se lance toute seule.", 'Choose your files: the document containing the designations (Company A, Person B…) and the .json table downloaded during anonymisation. Restoration starts by itself.'],
-  ['rs.table', 'Ou utilisez une table enregistrée sur cet appareil', 'Or use a table saved on this device'],
+  ['rs.autoItem', 'Historique — {doc} ({date})', 'History — {doc} ({date})'],
+  ['rf.clear', 'Recommencer avec d\'autres fichiers', 'Start again with other files'],
+  ['msg.restoredMulti', '{n} désignation(s) remplacée(s) dans {f} fichier(s).', '{n} designation(s) replaced in {f} file(s).'],
+  ['rr.how.file', 'Table utilisée : le fichier .json que vous avez fourni.', 'Table used: the .json file you provided.'],
+  ['rr.how.orig', "Table retrouvée grâce au document anonymisé d'origine que vous avez redéposé ({f}).", 'Table found thanks to the original anonymised document you dropped again ({f}).'],
+  ['rr.how.auto', "Table retrouvée automatiquement dans l'historique de cet appareil : {doc} ({date}), {k} désignation(s) reconnue(s).", 'Table found automatically in this device\'s history: {doc} ({date}), {k} designation(s) recognised.'],
+  ['rr.how.pinned', 'Table choisie par vous : {doc} ({date}).', 'Table chosen by you: {doc} ({date}).'],
+  ['rr.more', "Attention : {n} autre(s) table(s) de l'historique correspondent aussi. Vérifiez que les noms sont les bons ; sinon choisissez vous-même la bonne table ci-dessous.", 'Warning: {n} other table(s) in the history also match. Check that the names are the right ones; otherwise choose the right table yourself below.'],
+  ['rr.none', "Aucune table de l'historique ne correspond à ce document. Déposez aussi le document anonymisé d'origine, ou le fichier .json de la table.", 'No table in the history matches this document. Also drop the original anonymised document, or the table .json file.'],
+  ['dl.autoSaved', "✓ La table est conservée automatiquement sur cet appareil (chiffrée) : vous pourrez restaurer sans le fichier .json.", '✓ The table is kept automatically on this device (encrypted): you will be able to restore without the .json file.'],
+  ['dl.autoSaveFail', "La table n'a pas pu être conservée automatiquement sur cet appareil : gardez le fichier .json.", 'The table could not be kept automatically on this device: keep the .json file.'],
+  ['ev.autoSave', 'Table conservée automatiquement', 'Table kept automatically'],
+  ['sec.optAuto', 'Conserver automatiquement les tables sur cet appareil', 'Automatically keep tables on this device'],
+  ['sec.optAutoH', "Permet de restaurer sans fichier .json ni phrase secrète. Les tables sont chiffrées par une clé propre à l'appareil, mais toute personne qui utilise votre session sur cet appareil peut s'en servir : désactivez cette option si l'appareil est partagé.", 'Lets you restore without a .json file or passphrase. Tables are encrypted with a key specific to this device, but anyone using your session on this device could use them: turn this off if the device is shared.'],
+  ['sec.auto', 'Tables conservées automatiquement', 'Tables kept automatically'],
+  ['vt.autoT', 'Conservées automatiquement sur cet appareil', 'Kept automatically on this device'],
+  ['vt.autoB', "Ces tables sont enregistrées sans phrase secrète (chiffrées par une clé propre à l'appareil) pour restaurer en un geste. Supprimez-les si l'appareil est partagé.", 'These tables are saved without a passphrase (encrypted with a key specific to the device) so you can restore in one step. Delete them if the device is shared.'],
+  ['rs.sub', "Déposez simplement vos fichiers : ANONYX retrouve tout seul les vrais noms grâce à l'historique de cet appareil.", 'Simply drop your files: ANONYX finds the real names by itself thanks to the history of this device.'],
+  ['rs.table', "Ou choisissez vous-même une table de l'historique", 'Or choose a table from the history yourself'],
   ['rs.session', 'Session en cours — {doc} ({n} désignations)', 'Current session — {doc} ({n} designations)'],
   ['rs.vaultItem', 'Coffre — {doc} ({date})', 'Vault — {doc} ({date})'],
   ['rs.locked', "Le coffre est verrouillé. Saisissez la phrase secrète choisie à sa création, ou chargez plutôt le fichier .json de la table ci-dessous.", 'The vault is locked. Enter the passphrase you chose when creating it, or load the table .json file below instead.'],
   ['rs.legacyItem', 'Ancienne version — {doc} ({date})', 'Earlier version — {doc} ({date})'],
   ['rs.legacyHint', "Tables retrouvées sur cet appareil, enregistrées par l'ancienne version : vous pouvez les utiliser tout de suite, sans phrase secrète. Pensez ensuite à les protéger depuis « Correspondances ».", 'Tables found on this device, saved by the earlier version: you can use them right away, without a passphrase. Remember to protect them afterwards from “Mappings”.'],
   ['rs.help.t', 'En deux gestes', 'In two steps'],
-  ['rs.help.1', "Appuyez sur « Choisir des fichiers » et sélectionnez votre document anonymisé et le fichier .json de la table (ensemble, ou l'un après l'autre).", 'Tap “Choose files” and select your anonymised document and the table .json file (together, or one after the other).'],
-  ['rs.help.2', "Les vrais noms reviennent automatiquement : il ne reste qu'à télécharger le résultat.", 'The real names come back automatically: you only need to download the result.'],
+  ['rs.help.1', "Appuyez sur « Choisir des fichiers » et sélectionnez le document anonymisé d'origine (si vous l'avez) et les nouveaux fichiers à compléter, ensemble ou l'un après l'autre.", 'Tap “Choose files” and select the original anonymised document (if you have it) and the new files to complete, together or one after the other.'],
+  ['rs.help.2', "Les vrais noms reviennent automatiquement, grâce à l'historique de cet appareil. Le fichier .json n'est utile que pour restaurer sur un autre appareil, ou si l'historique a été effacé.", 'The real names come back automatically, thanks to the history of this device. The .json file is only needed to restore on another device, or if the history has been erased.'],
   ['rs.help.3', "Vous n'avez pas le fichier .json ? Ouvrez « Je ne retrouve pas ma table » plus bas.", "Don't have the .json file? Open “I can't find my table” below."],
   ['rf.label', 'Vos fichiers', 'Your files'],
-  ['rf.hint', "Le document anonymisé (Word, PDF ou texte) et la table de correspondance (.json). Sur iPhone : appuyez sur « Choisir des fichiers » puis sur « Sélectionner » pour en prendre deux d'un coup, ou recommencez pour le second.", 'The anonymised document (Word, PDF or text) and the mapping table (.json). On iPhone: tap “Choose files” then “Select” to pick two at once, or repeat for the second one.'],
+  ['rf.hint', "Word, PDF ou texte ; vous pouvez en choisir plusieurs. Sur iPhone : « Choisir des fichiers » puis « Sélectionner » pour en prendre plusieurs d'un coup, ou recommencez pour les suivants. Ajoutez le fichier .json seulement si vous l'avez et que l'historique ne suffit pas.", 'Word, PDF or text; you can choose several. On iPhone: “Choose files” then “Select” to pick several at once, or repeat for the next ones. Only add the .json file if you have it and the history is not enough.'],
   ['rf.table', 'Table reconnue : {f}', 'Table recognised: {f}'],
   ['rf.doc', 'Document reconnu : {f}', 'Document recognised: {f}'],
   ['rf.needDoc', 'Il manque le document à restaurer : ajoutez-le (Word, PDF ou texte).', 'The document to restore is missing: add it (Word, PDF or text).'],
@@ -1506,7 +1519,7 @@ const I18N_DATA = [
   ['docs.fTable', 'Table conservée', 'Table kept'],
   ['docs.fNo', 'Table non conservée', 'Table not kept'],
   ['docs.fKind', 'Tous les formats', 'All formats'],
-  ['status.table', 'Pseudonymisé — table dans le coffre', 'Pseudonymised — table in the vault'],
+  ['status.table', 'Pseudonymisé — table conservée sur cet appareil', 'Pseudonymised — table kept on this device'],
   ['status.none', "Table non conservée sur l'appareil", 'Table not kept on this device'],
   ['docs.meta', '{r} remplacement(s) · {n} désignation(s)', '{r} replacement(s) · {n} designation(s)'],
   ['docs.restore', 'Restaurer', 'Restore'],
@@ -1604,7 +1617,7 @@ const I18N_DATA = [
   ['sec.optNames', 'Conserver les noms de fichiers', 'Keep file names'],
   ['sec.optNamesH', "Désactivé par défaut : un nom de fichier peut lui-même être identifiant. Désactivé, les documents sont désignés par leur date.", 'Off by default: a file name can itself be identifying. When off, documents are identified by their date.'],
   ['sec.sess.t', 'Sessions et accès', 'Sessions and access'],
-  ['sec.sess.b', "ANONYX n'utilise aucun compte ni serveur : il n'y a pas de session distante. L'accès aux correspondances est protégé uniquement par la phrase secrète du coffre, sur cet appareil.", 'ANONYX uses no account or server: there is no remote session. Access to the mappings is protected solely by the vault passphrase, on this device.'],
+  ['sec.sess.b', "ANONYX n'utilise aucun compte ni serveur : il n'y a pas de session distante. Les tables du coffre sont protégées par la phrase secrète ; celles conservées automatiquement sont chiffrées par une clé propre à cet appareil.", 'ANONYX uses no account or server: there is no remote session. Vault tables are protected by the passphrase; those kept automatically are encrypted with a key specific to this device.'],
   ['sec.cache.t', 'Cache hors ligne', 'Offline cache'],
   ['sec.cache.b', "Le cache ne contient que les fichiers de l'application, jamais vos documents ni vos tables.", 'The cache contains only the application files, never your documents or tables.'],
   ['sec.cache.clear', 'Vider le cache hors ligne', 'Clear the offline cache'],
@@ -1684,13 +1697,13 @@ if (typeof module !== 'undefined') module.exports = { I18N_DATA };
    Rien ne quitte l'appareil. Le contenu des documents n'est jamais conservé.
    Les tables de correspondance ne sont conservées que chiffrées (AES-256-GCM,
    clé dérivée de la phrase secrète par PBKDF2) ; la clé reste en mémoire. */
-const KEYS = { prefs: 'anonyx_prefs_v1', hist: 'anonyx_history_v1', act: 'anonyx_activity_v1', vault: 'anonyx_vault_v1', legacy: 'anonymiseur_tables_v1' };
+const KEYS = { prefs: 'anonyx_prefs_v1', hist: 'anonyx_history_v1', act: 'anonyx_activity_v1', vault: 'anonyx_vault_v1', auto: 'anonyx_auto_v1', legacy: 'anonymiseur_tables_v1' };
 function lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
 
 /* ---- Préférences ---- */
-const PREF_DEFAULTS = { lang: '', name: '', history: true, keepNames: false, lockMin: 10, labelLang: 'auto', autoTable: true };
+const PREF_DEFAULTS = { lang: '', name: '', history: true, keepNames: false, lockMin: 10, labelLang: 'auto', autoTable: true, autoSave: true };
 let prefs = Object.assign({}, PREF_DEFAULTS, lsGet(KEYS.prefs, {}));
 if (prefs.lang !== 'fr' && prefs.lang !== 'en') prefs.lang = String(navigator.language || 'fr').toLowerCase().startsWith('en') ? 'en' : 'fr';
 function setPref(k, v) { prefs[k] = v; lsSet(KEYS.prefs, prefs); }
@@ -1833,10 +1846,54 @@ async function vaultChangePass(oldPass, newPass) {
 }
 function wipeAll() {
   vKey = null; clearTimeout(vTimer);
+  try { indexedDB.deleteDatabase(IDB_NAME); } catch (e) { /* ignore */ }
   for (const k of Object.values(KEYS)) lsDel(k);
   prefs = Object.assign({}, PREF_DEFAULTS, { lang: prefs.lang });
   fireVault('wipe');
 }
+
+/* ---- Tables conservées automatiquement (restauration sans fichier ni phrase secrète) ----
+   Chiffrées (AES-256-GCM) par une clé propre à l'appareil, non exportable, conservée dans IndexedDB.
+   Option désactivable ; chaque table est supprimable. L'empreinte (SHA-256) du document anonymisé permet de
+   reconnaître le fichier d'origine lorsqu'on le redépose. */
+const IDB_NAME = 'anonyx_device';
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('keys');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbRun(db, mode, fn) {
+  return new Promise((res, rej) => { const tx = db.transaction('keys', mode), q = fn(tx.objectStore('keys')); tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error); });
+}
+async function deviceKey() {
+  const db = await idbOpen();
+  let key = await idbRun(db, 'readonly', s => s.get('k'));
+  if (!key) { key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']); await idbRun(db, 'readwrite', s => s.put(key, 'k')); }
+  db.close();
+  return key;
+}
+function autoData() { const v = lsGet(KEYS.auto, null); return v && Array.isArray(v.items) ? v : { v: 1, items: [] }; }
+function autoList() { return autoData().items.map(({ id, hid, created, count, fp, label }) => ({ id, hid, created, count, fp, label: label || '' })); }
+async function autoAdd(mapping, fp, hid) {
+  if (!cryptoOk() || !window.indexedDB) throw new Error('crypto');
+  const rec = await aesEnc(await deviceKey(), mapping);
+  const d = autoData();
+  const item = Object.assign({ id: mapping.id, hid: hid || '', created: mapping.created, count: (mapping.entries || []).length, fp: fp || '', label: prefs.keepNames ? String(mapping.document || '') : '' }, rec);
+  d.items = [item].concat(d.items.filter(i => i.id !== item.id && !(hid && i.hid === hid))).slice(0, 200);
+  if (!lsSet(KEYS.auto, d)) throw new Error('storage');
+  logActivity('autoSave'); fireVault('change');
+}
+async function autoGet(id) {
+  const i = autoData().items.find(x => x.id === id);
+  if (!i) return null;
+  try { return await aesDec(await deviceKey(), i); } catch (e) { return null; }
+}
+function autoDelete(id) { const d = autoData(); d.items = d.items.filter(i => i.id !== id); lsSet(KEYS.auto, d); fireVault('change'); }
+function autoFindFps(fp) { return fp ? autoData().items.filter(i => i.fp === fp) : []; }
+const storedIds = () => new Set([...vaultList().map(m => m.id), ...autoList().map(m => m.id)]);
 
 /* ---- Export CSV : neutralisation des formules (Excel / Sheets) ---- */
 function csvCell(s) {
@@ -1852,7 +1909,7 @@ setLang(prefs.lang);
 const $ = (s, r) => (r || document).querySelector(s);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MIME = { docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', txt: 'text/plain;charset=utf-8', pdf: 'application/pdf' };
-const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null, histId: null, step: 1, restored: null, langs: [], rMap: null, rDoc: null };
+const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null, histId: null, step: 1, restored: null, langs: [], rMap: null, rDocs: [], rResults: [], pinned: null };
 
 function say(id, text, cls) {
   const el = $(id);
@@ -2270,10 +2327,23 @@ function run() {
     refreshMapChoices();
     setStep(4);
     if (!state.histId) state.histId = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    afterRun(state.result, state.histId);
     histUpsert({ id: state.histId, ts: Date.now(), name: prefs.keepNames ? state.name : '', kind: state.kind, replacements: total, designations: mapping.entries.length, residual: left });
     logActivity('apply', { r: total, n: mapping.entries.length });
     return true;
   } catch (e) { say('#m3', t('err.generic', { m: e.message || e }), 'err'); return false; }
+}
+/* Conservation automatique de la table (chiffrée par une clé de l'appareil) avec l'empreinte du document anonymisé */
+async function afterRun(r, hid) {
+  const note = $('#auto-note');
+  note.textContent = '';
+  r.fp = await fingerprint(r.d.text);
+  if (!prefs.autoSave) return;
+  try {
+    await autoAdd(r.mapping, r.fp, hid);
+    histUpsert({ id: hid, mapId: r.mapping.id });
+    if (state.result === r) note.textContent = t('dl.autoSaved');
+  } catch (e) { if (state.result === r) note.textContent = t('dl.autoSaveFail'); }
 }
 $('#run').addEventListener('click', () => { if (run()) $('#s4').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 $('#residual').addEventListener('click', e => {
@@ -2307,6 +2377,10 @@ function vaultErr(e) {
   if (m === 'locked') return t('vt.needOpen');
   return t('err.generic', { m: m || e });
 }
+function autoName(m) {
+  const h = histAll().find(x => x.id === m.hid);
+  return (h && h.name) || m.label || t('docs.untitled', { date: new Date(m.created).toLocaleDateString(locale()) });
+}
 function mapDocName(m) {
   const h = histAll().find(x => x.mapId === m.id);
   return (h && h.name) || m.label || t('docs.untitled', { date: new Date(m.created).toLocaleDateString(locale()) });
@@ -2323,7 +2397,8 @@ $('#save-map').addEventListener('click', async () => {
 });
 function refreshMapChoices() {
   const box = $('#map-choices');
-  const sel = (box.querySelector('input:checked') || {}).value || window.pendingMap;
+  if (window.pendingMap) { state.pinned = window.pendingMap; window.pendingMap = null; }
+  const sel = state.pinned || (box.querySelector('input:checked') || {}).value;
   setTimeout(showRFiles, 0);
   const opts = [];
   if (state.result) opts.push({ v: 'session', t: t('rs.session', { doc: state.result.mapping.document, n: state.result.mapping.entries.length }) });
@@ -2333,6 +2408,8 @@ function refreshMapChoices() {
     else locked = true;
   }
   const legacy = legacyTables();
+  const sessId = state.result && state.result.mapping.id;
+  for (const m of autoList()) if (m.id !== sessId) opts.push({ v: 'auto:' + m.id, t: t('rs.autoItem', { doc: autoName(m), date: new Date(m.created).toLocaleString(locale()) }) });
   for (const m of legacy) opts.push({ v: 'legacy:' + m.id, t: t('rs.legacyItem', { doc: m.document || t('doc.generic'), date: m.created ? new Date(m.created).toLocaleString(locale()) : '' }) });
   let html = opts.map((o, i) => `<label class="radio"><input type="radio" name="mapsrc" value="${esc(o.v)}"${(sel ? sel === o.v : i === 0) ? ' checked' : ''}> <span>${esc(o.t)}</span></label>`).join('');
   if (legacy.length) html += `<p class="hint">${esc(t('rs.legacyHint'))}</p>`;
@@ -2345,87 +2422,179 @@ $('#map-choices').addEventListener('click', async e => {
 onVaultChange(() => refreshMapChoices());
 refreshMapChoices();
 
-/* ---- 5. Restauration ---- */
-async function getMapping() {
-  const f = state.rMap || $('#r-map').files[0];
-  if (f) {
-    let map;
-    try { map = JSON.parse(await f.text()); } catch (e) { throw new Error(t('err.maptype')); }
-    if (!map || !Array.isArray(map.entries)) throw new Error(t('err.maptype'));
-    return map;
-  }
-  const c = $('#map-choices input:checked');
-  if (c) {
-    if (c.value === 'session' && state.result) return state.result.mapping;
-    if (c.value.startsWith('legacy:')) {
-      const m = legacyTables().find(x => 'legacy:' + x.id === c.value);
-      if (m) return m;
-    }
-    if (c.value.startsWith('vault:')) {
-      if (!vaultOpen()) throw new Error(t('vt.needOpen'));
-      const m = await vaultGet(c.value.slice(6));
-      if (m) return m;
-    }
-  }
-  throw new Error(t('err.nomap'));
+/* ---- 5. Restauration : documents déposés + table retrouvée dans l'historique de l'appareil (ou fichier .json) ---- */
+const DOC_EXT = ['pdf', 'docx', 'txt', 'md'];
+async function fingerprint(text) {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text).replace(/\s+/g, '').toLowerCase()));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) { return ''; }
 }
-/* Choix des fichiers en un seul geste : le document et la table (.json), ensemble ou l'un après l'autre */
+async function readSource(f) {
+  const ext = extOf(f), name = safeName(f.name.replace(/\.[^.]+$/, ''));
+  if (ext === 'docx') { const ents = await unzip(await f.arrayBuffer()); return { kind: 'docx', name, ents, text: docxPartsText(ents) }; }
+  if (ext === 'pdf') { const r = await pdfToText(await f.arrayBuffer()); return { kind: 'pdf', name, text: r.text }; }
+  if (['txt', 'md'].includes(ext)) return { kind: 'txt', name, text: await f.text() };
+  throw new Error(t('err.rfmt'));
+}
+function restoreSource(src, map) {
+  const m = buildMatcher(map.entries.filter(e => e.values && e.values.length).map(e => ({ variants: [e.label], repl: e.values[0] })));
+  const n = m.fn(src.text).length;
+  if (src.kind === 'docx') { const ents = transformDocx(src.ents, m.fn, {}); return { n, d: { kind: 'docx', name: src.name, bytes: zip(ents), text: docxPartsText(ents) } }; }
+  return { n, d: { kind: src.kind, name: src.name, text: applyMatches(src.text, m.fn(src.text)) } };
+}
+async function parseMapFile(f) {
+  let map;
+  try { map = JSON.parse(await f.text()); } catch (e) { throw new Error(t('err.maptype')); }
+  if (!map || !Array.isArray(map.entries)) throw new Error(t('err.maptype'));
+  return map;
+}
+/* Tables disponibles sur l'appareil (la table de la session, l'historique automatique, le coffre ouvert, l'ancienne version) */
+async function candidateTables() {
+  const out = [], sess = state.result && state.result.mapping;
+  if (sess) out.push({ key: 'session', created: sess.created, load: async () => sess });
+  for (const m of autoList()) if (!sess || m.id !== sess.id) out.push({ key: 'auto:' + m.id, created: m.created, label: autoName(m), load: () => autoGet(m.id) });
+  if (vaultOpen()) for (const m of vaultList()) out.push({ key: 'vault:' + m.id, created: m.created, label: mapDocName(m), load: () => vaultGet(m.id) });
+  for (const m of legacyTables()) out.push({ key: 'legacy:' + m.id, created: m.created || '', label: m.document || t('doc.generic'), load: async () => m });
+  return out;
+}
+function labelScore(text, map) {
+  const labels = map.entries.map(e => e.label).filter(Boolean);
+  if (!labels.length) return 0;
+  const found = new Set(buildMatcher([{ variants: labels, repl: 1 }]).fn(text).map(x => norm(text.slice(x.start, x.end))));
+  return found.size;
+}
+/* Table la plus adaptée au texte : celle dont le plus de désignations y figurent ; à égalité, la plus récente */
+async function bestTable(cands, text, force) {
+  const scored = [];
+  for (const c of cands) {
+    let map = null;
+    try { map = await c.load(); } catch (e) { map = null; }
+    if (!map || !Array.isArray(map.entries)) continue;
+    scored.push({ c, map, k: labelScore(text, map) });
+  }
+  const ok = scored.filter(x => x.k > 0 || (force && scored.length === 1));
+  ok.sort((a, b) => b.k - a.k || String(b.c.created).localeCompare(String(a.c.created)));
+  return ok.length ? { c: ok[0].c, map: ok[0].map, k: ok[0].k, more: ok.length - 1 } : null;
+}
+const hasAnyTable = () => !!(state.result || autoList().length || vaultList().length || legacyTables().length);
 function showRFiles() {
   const rows = [];
   if (state.rMap) rows.push(['ok', t('rf.table', { f: state.rMap.name })]);
-  if (state.rDoc) rows.push(['ok', t('rf.doc', { f: state.rDoc.name })]);
-  if (state.rMap && !state.rDoc) rows.push(['warn', t('rf.needDoc')]);
-  if (state.rDoc && !state.rMap && !$('#map-choices input')) rows.push(['warn', t('rf.needTable')]);
+  for (const f of state.rDocs) rows.push(['ok', t('rf.doc', { f: f.name })]);
+  if (state.rMap && !state.rDocs.length) rows.push(['warn', t('rf.needDoc')]);
+  if (state.rDocs.length && !state.rMap && !hasAnyTable()) rows.push(['warn', t('rf.needTable')]);
   $('#r-status').innerHTML = rows.map(([c, x]) => `<div class="msg show ${c}">${esc(x)}</div>`).join('');
+  $('#r-clear').hidden = !(state.rMap || state.rDocs.length);
 }
 $('#r-files').addEventListener('change', e => {
   for (const f of e.target.files) {
     const ext = extOf(f);
-    if (ext === 'json') state.rMap = f; else if (['pdf', 'docx', 'txt', 'md'].includes(ext)) state.rDoc = f;
+    if (ext === 'json') state.rMap = f;
+    else if (DOC_EXT.includes(ext) && !state.rDocs.some(x => x.name === f.name && x.size === f.size)) state.rDocs.push(f);
   }
   e.target.value = '';
   showRFiles();
-  if (state.rDoc && (state.rMap || document.querySelectorAll('#map-choices input').length === 1)) $('#r-run').click();
+  if (state.rDocs.length && (state.rMap || hasAnyTable())) runRestore();
 });
-$('#r-run').addEventListener('click', async () => {
+$('#r-clear').addEventListener('click', () => {
+  state.rMap = null; state.rDocs = []; state.pinned = null; state.rResults = [];
+  $('#r-out').innerHTML = ''; $('#r-out').hidden = true; say('#m5', ''); showRFiles();
+});
+function howText(r) {
+  if (r.how === 'file') return t('rr.how.file');
+  if (r.how === 'orig') return t('rr.how.orig', { f: r.ref });
+  if (r.how === 'pinned') return t('rr.how.pinned', { doc: r.label || '', date: r.date });
+  return t('rr.how.auto', { doc: r.label || '', date: r.date, k: r.k });
+}
+function renderRestoreResults(results) {
+  const box = $('#r-out');
+  box.innerHTML = ''; box.hidden = !results.length;
+  state.rResults = results;
+  results.forEach((r, i) => {
+    const card = document.createElement('div');
+    card.className = 'rcard';
+    const h = document.createElement('h3'); h.textContent = r.name; card.appendChild(h);
+    if (r.none) {
+      const w = document.createElement('div'); w.className = 'msg show warn'; w.textContent = t('rr.none'); card.appendChild(w);
+      box.appendChild(card); return;
+    }
+    const note = document.createElement('p'); note.className = 'hint'; note.style.marginTop = '0'; note.textContent = howText(r); card.appendChild(note);
+    if (r.more) { const w = document.createElement('div'); w.className = 'msg show warn'; w.textContent = t('rr.more', { n: r.more }); card.appendChild(w); }
+    const pv = document.createElement('div'); pv.className = 'preview';
+    const pre = document.createElement('pre'); if (i === 0) pre.id = 'r-preview';
+    pre.textContent = previewHtml(r.d.text).slice(0, 8000) + (r.d.text.length > 8000 ? '\n\n' + t('s4.prevMore') : '');
+    pv.appendChild(pre); card.appendChild(pv);
+    const cp = document.createElement('div'); cp.className = 'row';
+    const cb = document.createElement('button'); cb.type = 'button'; cb.className = 'btn sec r-copy'; cb.dataset.i = i; cb.textContent = t('rs.copy'); cp.appendChild(cb); card.appendChild(cp);
+    const dl = document.createElement('div'); dl.className = 'row'; dl.style.marginTop = '4px'; if (i === 0) dl.id = 'r-dl'; card.appendChild(dl);
+    box.appendChild(card);
+    renderDownloads(dl, r.d, t('suffix.rest'), '#m5');
+  });
+}
+$('#r-out').addEventListener('click', async e => {
+  const b = e.target.closest('.r-copy');
+  if (!b) return;
+  const r = (state.rResults || [])[+b.dataset.i];
+  if (!r || !r.d) return;
+  try { await navigator.clipboard.writeText(r.d.text.replace(/\f/g, '\n\n')); say('#m5', t('rs.copied'), 'ok'); }
+  catch (err) { say('#m5', t('err.copy'), 'warn'); }
+});
+let restoring = false;
+async function runRestore() {
+  if (restoring) return;
+  restoring = true;
   try {
     say('#m5', t('msg.restoring'), 'ok busy');
-    const map = await getMapping();
-    const matcher = buildMatcher(map.entries.filter(e => e.values && e.values.length).map(e => ({ variants: [e.label], repl: e.values[0] })));
-    const f = state.rDoc || $('#r-doc').files[0], pasted = $('#r-paste').value;
-    let d, srcText;
-    if (f) {
-      const ext = extOf(f), base = safeName(f.name.replace(/\.[^.]+$/, ''));
-      if (ext === 'docx') {
-        const src = await unzip(await f.arrayBuffer());
-        srcText = docxPartsText(src);
-        const ents = transformDocx(src, matcher.fn, {});
-        d = { kind: 'docx', name: base, bytes: zip(ents), text: docxPartsText(ents) };
-      } else if (ext === 'pdf') {
-        const r = await pdfToText(await f.arrayBuffer());
-        srcText = r.text;
-        d = { kind: 'pdf', name: base, text: applyMatches(r.text, matcher.fn(r.text)) };
-      } else if (['txt', 'md'].includes(ext)) {
-        srcText = await f.text();
-        d = { kind: 'txt', name: base, text: applyMatches(srcText, matcher.fn(srcText)) };
-      } else throw new Error(t('err.rfmt'));
-    } else if (pasted.trim()) {
-      srcText = pasted;
-      d = { kind: 'txt', name: t('name.text'), text: applyMatches(pasted, matcher.fn(pasted)) };
-    } else throw new Error(t('err.rnone'));
-    const n = matcher.fn(srcText).length;
-    $('#r-preview').textContent = previewHtml(d.text).slice(0, 8000) + (d.text.length > 8000 ? '\n\n' + t('s4.prevMore') : '');
-    $('#r-out').hidden = false;
-    state.restored = d;
-    renderDownloads($('#r-dl'), d, t('suffix.rest'), '#m5');
-    say('#m5', n ? t('msg.restored', { n }) : t('msg.restnone'), n ? 'ok' : 'warn');
-    logActivity('restore', { n });
+    const mf = state.rMap || $('#r-map').files[0];
+    const explicit = mf ? await parseMapFile(mf) : null;
+    const files = state.rDocs.length ? state.rDocs.slice() : ($('#r-doc').files[0] ? [$('#r-doc').files[0]] : []);
+    const sources = [];
+    for (const f of files) sources.push(await readSource(f));
+    for (const s of sources) { s.fp = await fingerprint(s.text); s.refs = autoFindFps(s.fp); }
+    const refs = sources.filter(s => s.refs.length), fresh = sources.filter(s => !s.refs.length);
+    const targets = (fresh.length ? fresh : sources).slice();
+    const pasted = $('#r-paste').value;
+    if (pasted.trim()) targets.push({ kind: 'txt', name: t('name.text'), text: pasted });
+    if (!targets.length) throw new Error(t('err.rnone'));
+    const cands = explicit ? [] : await candidateTables();
+    const results = [];
+    for (const s of targets) {
+      let map = null, how = '', pick = null;
+      if (explicit) { map = explicit; how = 'file'; }
+      else {
+        const pinned = state.pinned && cands.find(c => c.key === state.pinned);
+        if (pinned) { try { map = await pinned.load(); } catch (e) { map = null; } if (map) { how = 'pinned'; pick = { c: pinned, k: labelScore(s.text, map), more: 0 }; } }
+        if (!map && refs.length) {
+          const rc = refs.flatMap(r => r.refs.map(x => ({ key: 'auto:' + x.id, created: x.created, label: autoName(x), refName: r.name, load: () => autoGet(x.id) })));
+          pick = await bestTable(rc, s.text, true) || await bestTable(rc.slice(0, 1), '', true);
+          if (pick) { map = pick.map; how = 'orig'; pick.refName = pick.c.refName; }
+        }
+        if (!map) {
+          pick = await bestTable(cands, s.text, false);
+          if (pick) { map = pick.map; how = 'auto'; }
+        }
+      }
+      if (!map) { results.push({ name: s.name, none: true }); continue; }
+      const r = restoreSource(s, map);
+      results.push({ name: s.name, d: r.d, n: r.n, how, ref: pick && pick.refName, label: pick && pick.c.label, date: pick && pick.c.created ? new Date(pick.c.created).toLocaleDateString(locale()) : '', k: pick ? pick.k : 0, more: pick ? pick.more : 0, key: pick && pick.c.key });
+    }
+    renderRestoreResults(results);
+    const used = results.find(r => r.key);
+    if (used) { const radio = document.querySelector(`#map-choices input[value="${used.key}"]`); if (radio) radio.checked = true; }
+    const done = results.filter(r => r.d), total = done.reduce((a, r) => a + r.n, 0);
+    if (!done.length) say('#m5', t('rr.none'), 'warn');
+    else if (done.length === 1) say('#m5', total ? t('msg.restored', { n: total }) : t('msg.restnone'), total ? 'ok' : 'warn');
+    else say('#m5', t('msg.restoredMulti', { n: total, f: done.length }), total ? 'ok' : 'warn');
+    logActivity('restore', { n: total });
   } catch (e) { say('#m5', t('err.generic', { m: e.message || e }), 'err'); }
-});
-$('#r-copy').addEventListener('click', async () => {
-  if (!state.restored) return;
-  try { await navigator.clipboard.writeText(state.restored.text.replace(/\f/g, '\n\n')); say('#m5', t('rs.copied'), 'ok'); }
-  catch (e) { say('#m5', t('err.copy'), 'warn'); }
+  finally { restoring = false; }
+}
+$('#r-run').addEventListener('click', runRestore);
+$('#map-choices').addEventListener('change', e => {
+  if (e.target.name !== 'mapsrc') return;
+  state.pinned = e.target.value;
+  if (state.rDocs.length || $('#r-paste').value.trim() || $('#r-doc').files[0]) runRestore();
 });
 
 // Installation (PWA) : uniquement en HTTPS ou en local ; sans effet à l'ouverture directe du fichier.
@@ -2609,7 +2778,7 @@ async function ensureVaultOpen() {
 
 /* ---- Données d'affichage ---- */
 const docTitle = h => h.name || t('docs.untitled', { date: fmtDate(h.ts) });
-const docStatus = h => (h.mapId && vaultList().some(m => m.id === h.mapId) ? 'table' : 'none');
+const docStatus = h => (h.mapId && storedIds().has(h.mapId) ? 'table' : 'none');
 function evText(e) {
   const d = Object.assign({}, e.data || {});
   if (d.kind) d.kind = t('kind.' + d.kind);
@@ -2642,7 +2811,7 @@ async function renderDashboard() {
   $('#kpis').innerHTML =
     `<div class="kpi"><small>${esc(t('kpi.docs'))}</small><b>${fmt(hist.length)}</b></div>` +
     `<div class="kpi"><small>${esc(t('kpi.repl'))}</small><b>${fmt(repl)}</b></div>` +
-    `<div class="kpi"><small>${esc(t('kpi.tables'))}</small><b>${fmt(vaultList().length)}</b></div>` +
+    `<div class="kpi"><small>${esc(t('kpi.tables'))}</small><b>${fmt(storedIds().size)}</b></div>` +
     `<div class="kpi"><small>${esc(t('kpi.last'))}</small>${last ? `<b class="sm">${esc(evText(last))}</b><small>${esc(fmtDate(last.ts))}</small>` : `<b class="sm">${esc(t('kpi.never'))}</b>`}</div>`;
   const vs = vaultExists() ? (vaultOpen() ? 'vault.open' : 'vault.locked') : 'vault.none';
   const off = await offlineReady();
@@ -2675,7 +2844,7 @@ $('#doc-list').addEventListener('click', async e => {
   if (!b) return;
   const h = histAll().find(x => x.id === b.dataset.id);
   if (!h) return;
-  if (b.dataset.act === 'restore') { window.pendingMap = 'vault:' + h.mapId; go('restore'); }
+  if (b.dataset.act === 'restore') { window.pendingMap = (autoList().some(m => m.id === h.mapId) ? 'auto:' : 'vault:') + h.mapId; go('restore'); }
   else if (b.dataset.act === 'table') { window.focusMap = h.mapId; go('vault'); }
   else if (b.dataset.act === 'del' && await confirmDialog(t('docs.confirmDel'), t('common.delete'), true)) { histDelete(h.id); renderDocuments(); }
 });
@@ -2685,6 +2854,14 @@ function vaultMsg(txt, cls) { say('#m-vault', txt, cls); }
 function renderVault() {
   const legacy = legacyTables().length;
   let html = legacy ? noticeHtml(t('vt.legacy', { n: legacy })) : '';
+  const inVault = new Set(vaultList().map(m => m.id));
+  const autos = autoList().filter(m => !inVault.has(m.id));
+  if (autos.length) {
+    html += `<div class="card"><h2>${ico('file')} ${esc(t('vt.autoT'))}</h2><p class="hint" style="margin-top:0">${esc(t('vt.autoB'))}</p>` + autos.map(m => `<div class="vcard${window.focusMap === m.id ? ' hl' : ''}" data-id="${esc(m.id)}"><div class="t" style="font-weight:600;overflow-wrap:anywhere">${esc(autoName(m))}</div>
+      <div class="m" style="font-size:13.5px;color:var(--muted)">${esc(fmtDate(new Date(m.created).getTime()))} · ${esc(t('vt.count', { n: m.count }))}</div>
+      <div class="row" style="margin-top:10px"><button class="btn sec sm" type="button" data-av="reveal">${esc(t('vt.reveal'))}</button><button class="btn sec sm" type="button" data-av="json">JSON</button><button class="btn sec sm" type="button" data-av="csv">CSV</button><button class="btn sec sm" type="button" data-av="use">${esc(t('vt.use'))}</button><button class="btn sec sm" type="button" data-av="del">${esc(t('common.delete'))}</button></div>
+      <div class="vals" hidden></div></div>`).join('') + '</div>';
+  }
   if (!vaultExists()) {
     html += `<div class="card"><h2>${ico('key')} ${esc(t('vt.none.t'))}</h2><p>${esc(t('vt.none.b'))}</p><div class="row"><button class="btn" type="button" data-vt="create">${esc(t('vt.create'))}</button></div></div>`;
   } else if (!vaultOpen()) {
@@ -2721,7 +2898,25 @@ $('#vault-body').addEventListener('click', async e => {
       const m = await vaultGet(id);
       if (m) exportMap(m, act, mapDocName(vaultList().find(x => x.id === id) || {}));
     } else if (act === 'use') { window.pendingMap = 'vault:' + id; go('restore'); }
-    else if (act === 'del' && await confirmDialog(t('vt.delConfirm'), t('common.delete'), true)) vaultDelete(id);
+    else if (act === 'del' && await confirmDialog(t('vt.delConfirm'), t('common.delete'), true)) { vaultDelete(id); autoDelete(id); }
+  } catch (err) { vaultMsg(vaultErr(err), 'err'); }
+});
+$('#vault-body').addEventListener('click', async e => {
+  const b = e.target.closest('[data-av]');
+  if (!b) return;
+  const act = b.dataset.av, card = b.closest('.vcard'), id = card.dataset.id;
+  try {
+    if (act === 'reveal') {
+      const box = $('.vals', card);
+      if (!box.hidden) { box.hidden = true; box.textContent = ''; b.textContent = t('vt.reveal'); return; }
+      const m = await autoGet(id);
+      box.innerHTML = (m ? m.entries : []).map(x => `<div><b>${esc(x.label)}</b> → ${esc((x.values || []).join(' | '))}</div>`).join('');
+      box.hidden = false; b.textContent = t('vt.hide');
+    } else if (act === 'json' || act === 'csv') {
+      const m = await autoGet(id);
+      if (m) exportMap(m, act, autoName(autoList().find(x => x.id === id) || {}));
+    } else if (act === 'use') { window.pendingMap = 'auto:' + id; go('restore'); }
+    else if (act === 'del' && await confirmDialog(t('vt.delConfirm'), t('common.delete'), true)) autoDelete(id);
   } catch (err) { vaultMsg(vaultErr(err), 'err'); }
 });
 $('#vault-body').addEventListener('change', async e => {
@@ -2751,7 +2946,7 @@ $('#act-clear').addEventListener('click', async () => {
 
 /* ---- Sécurité et confidentialité ---- */
 function renderSecurity() {
-  const hist = histAll().length, act = actAll().length, tabs = vaultList().length, legacy = legacyTables().length;
+  const hist = histAll().length, act = actAll().length, tabs = vaultList().length, autos = autoList().length, legacy = legacyTables().length;
   const vs = vaultExists() ? (vaultOpen() ? 'vault.open' : 'vault.locked') : 'vault.none';
   const opts = [5, 10, 30, 60].map(n => `<option value="${n}"${+prefs.lockMin === n ? ' selected' : ''}>${esc(t('sec.min', { n }))}</option>`).join('');
   const row = (k, v) => `<li><span>${esc(k)}</span><span>${esc(v)}</span></li>`;
@@ -2761,10 +2956,11 @@ function renderSecurity() {
     <label class="lbl" for="sec-lock">${esc(t('sec.lockDelay'))}</label><select id="sec-lock">${opts}</select>
     <div class="row"><button class="btn sec" type="button" data-sec="lock"${vaultOpen() ? '' : ' disabled'}>${esc(t('sec.lockNow'))}</button></div></div>
   <div class="card"><h2>${esc(t('sec.opt.t'))}</h2>
+    <label class="switch"><input type="checkbox" id="sec-auto"${prefs.autoSave ? ' checked' : ''}><span><b>${esc(t('sec.optAuto'))}</b><span class="hint">${esc(t('sec.optAutoH'))}</span></span></label>
     <label class="switch"><input type="checkbox" id="sec-hist"${prefs.history ? ' checked' : ''}><span><b>${esc(t('sec.optHist'))}</b><span class="hint">${esc(t('sec.optHistH'))}</span></span></label>
     <label class="switch"><input type="checkbox" id="sec-table"${prefs.autoTable ? ' checked' : ''}><span><b>${esc(t('sec.optTable'))}</b><span class="hint">${esc(t('sec.optTableH'))}</span></span></label>
     <label class="switch"><input type="checkbox" id="sec-names"${prefs.keepNames ? ' checked' : ''}><span><b>${esc(t('sec.optNames'))}</b><span class="hint">${esc(t('sec.optNamesH'))}</span></span></label></div>
-  <div class="card"><h2>${esc(t('sec.data.t'))}</h2><ul class="status">${row(t('sec.hist'), t('sec.items', { n: hist }))}${row(t('sec.log'), t('sec.items', { n: act }))}${row(t('sec.tables'), t('sec.items', { n: tabs }))}${legacy ? row(t('sec.legacy'), t('sec.items', { n: legacy })) : ''}</ul>
+  <div class="card"><h2>${esc(t('sec.data.t'))}</h2><ul class="status">${row(t('sec.hist'), t('sec.items', { n: hist }))}${row(t('sec.log'), t('sec.items', { n: act }))}${row(t('sec.tables'), t('sec.items', { n: tabs }))}${row(t('sec.auto'), t('sec.items', { n: autos }))}${legacy ? row(t('sec.legacy'), t('sec.items', { n: legacy })) : ''}</ul>
     <div class="row"><button class="btn sec" type="button" data-sec="clearhist">${esc(t('sec.clearHist'))}</button></div></div>
   <div class="card"><h2>${esc(t('sec.sess.t'))}</h2><p style="margin:0">${esc(t('sec.sess.b'))}</p></div>
   <div class="card"><h2>${esc(t('sec.cache.t'))}</h2><p>${esc(t('sec.cache.b'))}</p><div class="row" style="margin-top:0"><button class="btn sec" type="button" data-sec="cache">${esc(t('sec.cache.clear'))}</button></div></div>
@@ -2796,6 +2992,7 @@ $('#sec-body').addEventListener('change', e => {
   else if (e.target.id === 'sec-hist') setPref('history', e.target.checked);
   else if (e.target.id === 'sec-names') setPref('keepNames', e.target.checked);
   else if (e.target.id === 'sec-table') setPref('autoTable', e.target.checked);
+  else if (e.target.id === 'sec-auto') setPref('autoSave', e.target.checked);
   else return;
   say('#m-sec', t('pf.saved'), 'ok');
 });

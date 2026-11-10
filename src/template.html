@@ -321,6 +321,7 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
       <button class="btn sec" id="dl-csv" type="button" data-i18n="s4.csv"></button>
     </div>
     <div class="msg" id="m4" role="status"></div>
+    <p class="hint" id="auto-note" role="status"></p>
     <p class="hint" data-i18n="s4.warn"></p>
   </section>
 </section>
@@ -337,6 +338,7 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
     <input type="file" id="r-files" multiple accept=".pdf,.docx,.txt,.md,.json,application/json">
     <p class="hint" data-i18n="rf.hint"></p>
     <div id="r-status"></div>
+    <div class="row" style="margin-top:6px"><button class="btn sec sm" id="r-clear" type="button" hidden data-i18n="rf.clear"></button></div>
     <div id="map-choices"></div>
     <details style="margin-top:12px"><summary data-i18n="rs.lost.t"></summary>
       <ul style="margin:8px 0 0;padding-left:20px"><li data-i18n="rs.lost.1"></li><li data-i18n="rs.lost.2"></li><li data-i18n="rs.lost.3"></li><li data-i18n="rs.lost.4"></li></ul></details>
@@ -350,13 +352,7 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
     </details>
     <div class="row"><button class="btn" id="r-run" type="button" data-i18n="rs.run"></button></div>
     <div class="msg" id="m5" role="status"></div>
-    <div id="r-out" hidden>
-      <h3 data-i18n="rs.out"></h3>
-      <div class="preview"><pre id="r-preview"></pre></div>
-      <div class="row"><button class="btn sec" id="r-copy" type="button" data-i18n="rs.copy"></button></div>
-      <h3 data-i18n="s4.dl"></h3>
-      <div class="row" style="margin-top:4px" id="r-dl"></div>
-    </div>
+    <div id="r-out" hidden></div>
   </section>
 </section>
 

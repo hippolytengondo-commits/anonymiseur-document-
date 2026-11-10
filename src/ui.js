@@ -176,7 +176,7 @@ async function ensureVaultOpen() {
 
 /* ---- Données d'affichage ---- */
 const docTitle = h => h.name || t('docs.untitled', { date: fmtDate(h.ts) });
-const docStatus = h => (h.mapId && vaultList().some(m => m.id === h.mapId) ? 'table' : 'none');
+const docStatus = h => (h.mapId && storedIds().has(h.mapId) ? 'table' : 'none');
 function evText(e) {
   const d = Object.assign({}, e.data || {});
   if (d.kind) d.kind = t('kind.' + d.kind);
@@ -209,7 +209,7 @@ async function renderDashboard() {
   $('#kpis').innerHTML =
     `<div class="kpi"><small>${esc(t('kpi.docs'))}</small><b>${fmt(hist.length)}</b></div>` +
     `<div class="kpi"><small>${esc(t('kpi.repl'))}</small><b>${fmt(repl)}</b></div>` +
-    `<div class="kpi"><small>${esc(t('kpi.tables'))}</small><b>${fmt(vaultList().length)}</b></div>` +
+    `<div class="kpi"><small>${esc(t('kpi.tables'))}</small><b>${fmt(storedIds().size)}</b></div>` +
     `<div class="kpi"><small>${esc(t('kpi.last'))}</small>${last ? `<b class="sm">${esc(evText(last))}</b><small>${esc(fmtDate(last.ts))}</small>` : `<b class="sm">${esc(t('kpi.never'))}</b>`}</div>`;
   const vs = vaultExists() ? (vaultOpen() ? 'vault.open' : 'vault.locked') : 'vault.none';
   const off = await offlineReady();
@@ -242,7 +242,7 @@ $('#doc-list').addEventListener('click', async e => {
   if (!b) return;
   const h = histAll().find(x => x.id === b.dataset.id);
   if (!h) return;
-  if (b.dataset.act === 'restore') { window.pendingMap = 'vault:' + h.mapId; go('restore'); }
+  if (b.dataset.act === 'restore') { window.pendingMap = (autoList().some(m => m.id === h.mapId) ? 'auto:' : 'vault:') + h.mapId; go('restore'); }
   else if (b.dataset.act === 'table') { window.focusMap = h.mapId; go('vault'); }
   else if (b.dataset.act === 'del' && await confirmDialog(t('docs.confirmDel'), t('common.delete'), true)) { histDelete(h.id); renderDocuments(); }
 });
@@ -252,6 +252,14 @@ function vaultMsg(txt, cls) { say('#m-vault', txt, cls); }
 function renderVault() {
   const legacy = legacyTables().length;
   let html = legacy ? noticeHtml(t('vt.legacy', { n: legacy })) : '';
+  const inVault = new Set(vaultList().map(m => m.id));
+  const autos = autoList().filter(m => !inVault.has(m.id));
+  if (autos.length) {
+    html += `<div class="card"><h2>${ico('file')} ${esc(t('vt.autoT'))}</h2><p class="hint" style="margin-top:0">${esc(t('vt.autoB'))}</p>` + autos.map(m => `<div class="vcard${window.focusMap === m.id ? ' hl' : ''}" data-id="${esc(m.id)}"><div class="t" style="font-weight:600;overflow-wrap:anywhere">${esc(autoName(m))}</div>
+      <div class="m" style="font-size:13.5px;color:var(--muted)">${esc(fmtDate(new Date(m.created).getTime()))} · ${esc(t('vt.count', { n: m.count }))}</div>
+      <div class="row" style="margin-top:10px"><button class="btn sec sm" type="button" data-av="reveal">${esc(t('vt.reveal'))}</button><button class="btn sec sm" type="button" data-av="json">JSON</button><button class="btn sec sm" type="button" data-av="csv">CSV</button><button class="btn sec sm" type="button" data-av="use">${esc(t('vt.use'))}</button><button class="btn sec sm" type="button" data-av="del">${esc(t('common.delete'))}</button></div>
+      <div class="vals" hidden></div></div>`).join('') + '</div>';
+  }
   if (!vaultExists()) {
     html += `<div class="card"><h2>${ico('key')} ${esc(t('vt.none.t'))}</h2><p>${esc(t('vt.none.b'))}</p><div class="row"><button class="btn" type="button" data-vt="create">${esc(t('vt.create'))}</button></div></div>`;
   } else if (!vaultOpen()) {
@@ -288,7 +296,25 @@ $('#vault-body').addEventListener('click', async e => {
       const m = await vaultGet(id);
       if (m) exportMap(m, act, mapDocName(vaultList().find(x => x.id === id) || {}));
     } else if (act === 'use') { window.pendingMap = 'vault:' + id; go('restore'); }
-    else if (act === 'del' && await confirmDialog(t('vt.delConfirm'), t('common.delete'), true)) vaultDelete(id);
+    else if (act === 'del' && await confirmDialog(t('vt.delConfirm'), t('common.delete'), true)) { vaultDelete(id); autoDelete(id); }
+  } catch (err) { vaultMsg(vaultErr(err), 'err'); }
+});
+$('#vault-body').addEventListener('click', async e => {
+  const b = e.target.closest('[data-av]');
+  if (!b) return;
+  const act = b.dataset.av, card = b.closest('.vcard'), id = card.dataset.id;
+  try {
+    if (act === 'reveal') {
+      const box = $('.vals', card);
+      if (!box.hidden) { box.hidden = true; box.textContent = ''; b.textContent = t('vt.reveal'); return; }
+      const m = await autoGet(id);
+      box.innerHTML = (m ? m.entries : []).map(x => `<div><b>${esc(x.label)}</b> → ${esc((x.values || []).join(' | '))}</div>`).join('');
+      box.hidden = false; b.textContent = t('vt.hide');
+    } else if (act === 'json' || act === 'csv') {
+      const m = await autoGet(id);
+      if (m) exportMap(m, act, autoName(autoList().find(x => x.id === id) || {}));
+    } else if (act === 'use') { window.pendingMap = 'auto:' + id; go('restore'); }
+    else if (act === 'del' && await confirmDialog(t('vt.delConfirm'), t('common.delete'), true)) autoDelete(id);
   } catch (err) { vaultMsg(vaultErr(err), 'err'); }
 });
 $('#vault-body').addEventListener('change', async e => {
@@ -318,7 +344,7 @@ $('#act-clear').addEventListener('click', async () => {
 
 /* ---- Sécurité et confidentialité ---- */
 function renderSecurity() {
-  const hist = histAll().length, act = actAll().length, tabs = vaultList().length, legacy = legacyTables().length;
+  const hist = histAll().length, act = actAll().length, tabs = vaultList().length, autos = autoList().length, legacy = legacyTables().length;
   const vs = vaultExists() ? (vaultOpen() ? 'vault.open' : 'vault.locked') : 'vault.none';
   const opts = [5, 10, 30, 60].map(n => `<option value="${n}"${+prefs.lockMin === n ? ' selected' : ''}>${esc(t('sec.min', { n }))}</option>`).join('');
   const row = (k, v) => `<li><span>${esc(k)}</span><span>${esc(v)}</span></li>`;
@@ -328,10 +354,11 @@ function renderSecurity() {
     <label class="lbl" for="sec-lock">${esc(t('sec.lockDelay'))}</label><select id="sec-lock">${opts}</select>
     <div class="row"><button class="btn sec" type="button" data-sec="lock"${vaultOpen() ? '' : ' disabled'}>${esc(t('sec.lockNow'))}</button></div></div>
   <div class="card"><h2>${esc(t('sec.opt.t'))}</h2>
+    <label class="switch"><input type="checkbox" id="sec-auto"${prefs.autoSave ? ' checked' : ''}><span><b>${esc(t('sec.optAuto'))}</b><span class="hint">${esc(t('sec.optAutoH'))}</span></span></label>
     <label class="switch"><input type="checkbox" id="sec-hist"${prefs.history ? ' checked' : ''}><span><b>${esc(t('sec.optHist'))}</b><span class="hint">${esc(t('sec.optHistH'))}</span></span></label>
     <label class="switch"><input type="checkbox" id="sec-table"${prefs.autoTable ? ' checked' : ''}><span><b>${esc(t('sec.optTable'))}</b><span class="hint">${esc(t('sec.optTableH'))}</span></span></label>
     <label class="switch"><input type="checkbox" id="sec-names"${prefs.keepNames ? ' checked' : ''}><span><b>${esc(t('sec.optNames'))}</b><span class="hint">${esc(t('sec.optNamesH'))}</span></span></label></div>
-  <div class="card"><h2>${esc(t('sec.data.t'))}</h2><ul class="status">${row(t('sec.hist'), t('sec.items', { n: hist }))}${row(t('sec.log'), t('sec.items', { n: act }))}${row(t('sec.tables'), t('sec.items', { n: tabs }))}${legacy ? row(t('sec.legacy'), t('sec.items', { n: legacy })) : ''}</ul>
+  <div class="card"><h2>${esc(t('sec.data.t'))}</h2><ul class="status">${row(t('sec.hist'), t('sec.items', { n: hist }))}${row(t('sec.log'), t('sec.items', { n: act }))}${row(t('sec.tables'), t('sec.items', { n: tabs }))}${row(t('sec.auto'), t('sec.items', { n: autos }))}${legacy ? row(t('sec.legacy'), t('sec.items', { n: legacy })) : ''}</ul>
     <div class="row"><button class="btn sec" type="button" data-sec="clearhist">${esc(t('sec.clearHist'))}</button></div></div>
   <div class="card"><h2>${esc(t('sec.sess.t'))}</h2><p style="margin:0">${esc(t('sec.sess.b'))}</p></div>
   <div class="card"><h2>${esc(t('sec.cache.t'))}</h2><p>${esc(t('sec.cache.b'))}</p><div class="row" style="margin-top:0"><button class="btn sec" type="button" data-sec="cache">${esc(t('sec.cache.clear'))}</button></div></div>
@@ -363,6 +390,7 @@ $('#sec-body').addEventListener('change', e => {
   else if (e.target.id === 'sec-hist') setPref('history', e.target.checked);
   else if (e.target.id === 'sec-names') setPref('keepNames', e.target.checked);
   else if (e.target.id === 'sec-table') setPref('autoTable', e.target.checked);
+  else if (e.target.id === 'sec-auto') setPref('autoSave', e.target.checked);
   else return;
   say('#m-sec', t('pf.saved'), 'ok');
 });

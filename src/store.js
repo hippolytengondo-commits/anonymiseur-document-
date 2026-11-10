@@ -2,13 +2,13 @@
    Rien ne quitte l'appareil. Le contenu des documents n'est jamais conservé.
    Les tables de correspondance ne sont conservées que chiffrées (AES-256-GCM,
    clé dérivée de la phrase secrète par PBKDF2) ; la clé reste en mémoire. */
-const KEYS = { prefs: 'anonyx_prefs_v1', hist: 'anonyx_history_v1', act: 'anonyx_activity_v1', vault: 'anonyx_vault_v1', legacy: 'anonymiseur_tables_v1' };
+const KEYS = { prefs: 'anonyx_prefs_v1', hist: 'anonyx_history_v1', act: 'anonyx_activity_v1', vault: 'anonyx_vault_v1', auto: 'anonyx_auto_v1', legacy: 'anonymiseur_tables_v1' };
 function lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
 
 /* ---- Préférences ---- */
-const PREF_DEFAULTS = { lang: '', name: '', history: true, keepNames: false, lockMin: 10, labelLang: 'auto', autoTable: true };
+const PREF_DEFAULTS = { lang: '', name: '', history: true, keepNames: false, lockMin: 10, labelLang: 'auto', autoTable: true, autoSave: true };
 let prefs = Object.assign({}, PREF_DEFAULTS, lsGet(KEYS.prefs, {}));
 if (prefs.lang !== 'fr' && prefs.lang !== 'en') prefs.lang = String(navigator.language || 'fr').toLowerCase().startsWith('en') ? 'en' : 'fr';
 function setPref(k, v) { prefs[k] = v; lsSet(KEYS.prefs, prefs); }
@@ -151,10 +151,54 @@ async function vaultChangePass(oldPass, newPass) {
 }
 function wipeAll() {
   vKey = null; clearTimeout(vTimer);
+  try { indexedDB.deleteDatabase(IDB_NAME); } catch (e) { /* ignore */ }
   for (const k of Object.values(KEYS)) lsDel(k);
   prefs = Object.assign({}, PREF_DEFAULTS, { lang: prefs.lang });
   fireVault('wipe');
 }
+
+/* ---- Tables conservées automatiquement (restauration sans fichier ni phrase secrète) ----
+   Chiffrées (AES-256-GCM) par une clé propre à l'appareil, non exportable, conservée dans IndexedDB.
+   Option désactivable ; chaque table est supprimable. L'empreinte (SHA-256) du document anonymisé permet de
+   reconnaître le fichier d'origine lorsqu'on le redépose. */
+const IDB_NAME = 'anonyx_device';
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('keys');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbRun(db, mode, fn) {
+  return new Promise((res, rej) => { const tx = db.transaction('keys', mode), q = fn(tx.objectStore('keys')); tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error); });
+}
+async function deviceKey() {
+  const db = await idbOpen();
+  let key = await idbRun(db, 'readonly', s => s.get('k'));
+  if (!key) { key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']); await idbRun(db, 'readwrite', s => s.put(key, 'k')); }
+  db.close();
+  return key;
+}
+function autoData() { const v = lsGet(KEYS.auto, null); return v && Array.isArray(v.items) ? v : { v: 1, items: [] }; }
+function autoList() { return autoData().items.map(({ id, hid, created, count, fp, label }) => ({ id, hid, created, count, fp, label: label || '' })); }
+async function autoAdd(mapping, fp, hid) {
+  if (!cryptoOk() || !window.indexedDB) throw new Error('crypto');
+  const rec = await aesEnc(await deviceKey(), mapping);
+  const d = autoData();
+  const item = Object.assign({ id: mapping.id, hid: hid || '', created: mapping.created, count: (mapping.entries || []).length, fp: fp || '', label: prefs.keepNames ? String(mapping.document || '') : '' }, rec);
+  d.items = [item].concat(d.items.filter(i => i.id !== item.id && !(hid && i.hid === hid))).slice(0, 200);
+  if (!lsSet(KEYS.auto, d)) throw new Error('storage');
+  logActivity('autoSave'); fireVault('change');
+}
+async function autoGet(id) {
+  const i = autoData().items.find(x => x.id === id);
+  if (!i) return null;
+  try { return await aesDec(await deviceKey(), i); } catch (e) { return null; }
+}
+function autoDelete(id) { const d = autoData(); d.items = d.items.filter(i => i.id !== id); lsSet(KEYS.auto, d); fireVault('change'); }
+function autoFindFps(fp) { return fp ? autoData().items.filter(i => i.fp === fp) : []; }
+const storedIds = () => new Set([...vaultList().map(m => m.id), ...autoList().map(m => m.id)]);
 
 /* ---- Export CSV : neutralisation des formules (Excel / Sheets) ---- */
 function csvCell(s) {
