@@ -2,7 +2,7 @@
 const $ = (s, r) => (r || document).querySelector(s);
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MIME = { docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', txt: 'text/plain;charset=utf-8', pdf: 'application/pdf' };
-const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null, histId: null, step: 1, restored: null, langs: [] };
+const state = { kind: null, name: '', zip: null, text: '', media: 0, items: [], nextId: 1, result: null, histId: null, step: 1, restored: null, langs: [], rMap: null, rDoc: null };
 
 function say(id, text, cls) {
   const el = $(id);
@@ -135,7 +135,7 @@ function outputsOf(d) {
   else L.push([t('dl.txt'), 'txt', txtFn, true]);
   return L;
 }
-function renderDownloads(box, d, suffix, msgSel) {
+function renderDownloads(box, d, suffix, msgSel, mapping) {
   box.innerHTML = '';
   if (d.kind === 'pdf' && NON_LATIN.test(d.text) && msgSel) say(msgSel, t('dl.pdfWarn'), 'warn');
   for (const [label, ext, fn, primary] of outputsOf(d)) {
@@ -143,7 +143,8 @@ function renderDownloads(box, d, suffix, msgSel) {
     b.type = 'button'; b.className = 'btn' + (primary ? '' : ' sec'); b.textContent = label;
     b.addEventListener('click', async () => {
       b.disabled = true;
-      try { const r = await fn(); download(`${d.name}${suffix}.${ext}`, r.data, r.mime); logActivity('export', { fmt: ext }); }
+      try { const r = await fn(); download(`${d.name}${suffix}.${ext}`, r.data, r.mime); logActivity('export', { fmt: ext });
+        if (mapping && prefs.autoTable) { setTimeout(() => exportMap(mapping, 'json', state.name), 600); say(msgSel, t('dl.autoTable'), 'ok'); } }
       catch (e) { say(msgSel, t('err.generic', { m: e.message || e }), 'err'); }
       b.disabled = false;
     });
@@ -392,7 +393,7 @@ function renderResult() {
   $('#residual').innerHTML = res.length
     ? res.map(x => `<button type="button" class="chip" data-w="${esc(x.word)}">${esc(x.word)}<i>×${x.total}</i></button>`).join('')
     : `<span class="hint">${esc(t('s4.noRes'))}</span>`;
-  renderDownloads($('#dl-box'), d, t('suffix.anon'), '#m4');
+  renderDownloads($('#dl-box'), d, t('suffix.anon'), '#m4', mapping);
   $('#s4').hidden = false;
 }
 function run() {
@@ -473,6 +474,7 @@ $('#save-map').addEventListener('click', async () => {
 function refreshMapChoices() {
   const box = $('#map-choices');
   const sel = (box.querySelector('input:checked') || {}).value || window.pendingMap;
+  setTimeout(showRFiles, 0);
   const opts = [];
   if (state.result) opts.push({ v: 'session', t: t('rs.session', { doc: state.result.mapping.document, n: state.result.mapping.entries.length }) });
   let locked = false;
@@ -485,7 +487,7 @@ function refreshMapChoices() {
   let html = opts.map((o, i) => `<label class="radio"><input type="radio" name="mapsrc" value="${esc(o.v)}"${(sel ? sel === o.v : i === 0) ? ' checked' : ''}> <span>${esc(o.t)}</span></label>`).join('');
   if (legacy.length) html += `<p class="hint">${esc(t('rs.legacyHint'))}</p>`;
   if (locked) html += `<div class="row"><span class="hint">${esc(t('rs.locked'))}</span><button type="button" class="btn sec" id="map-unlock">${esc(t('rs.unlock'))}</button></div>`;
-  box.innerHTML = html || `<p class="hint" style="margin:0">${esc(t('rs.none'))}</p>`;
+  box.innerHTML = html ? `<label class="lbl">${esc(t('rs.table'))}</label>` + html : '';
 }
 $('#map-choices').addEventListener('click', async e => {
   if (e.target.id === 'map-unlock') { await ensureVaultOpen(); refreshMapChoices(); }
@@ -495,9 +497,10 @@ refreshMapChoices();
 
 /* ---- 5. Restauration ---- */
 async function getMapping() {
-  const f = $('#r-map').files[0];
+  const f = state.rMap || $('#r-map').files[0];
   if (f) {
-    const map = JSON.parse(await f.text());
+    let map;
+    try { map = JSON.parse(await f.text()); } catch (e) { throw new Error(t('err.maptype')); }
     if (!map || !Array.isArray(map.entries)) throw new Error(t('err.maptype'));
     return map;
   }
@@ -516,12 +519,30 @@ async function getMapping() {
   }
   throw new Error(t('err.nomap'));
 }
+/* Choix des fichiers en un seul geste : le document et la table (.json), ensemble ou l'un après l'autre */
+function showRFiles() {
+  const rows = [];
+  if (state.rMap) rows.push(['ok', t('rf.table', { f: state.rMap.name })]);
+  if (state.rDoc) rows.push(['ok', t('rf.doc', { f: state.rDoc.name })]);
+  if (state.rMap && !state.rDoc) rows.push(['warn', t('rf.needDoc')]);
+  if (state.rDoc && !state.rMap && !$('#map-choices input')) rows.push(['warn', t('rf.needTable')]);
+  $('#r-status').innerHTML = rows.map(([c, x]) => `<div class="msg show ${c}">${esc(x)}</div>`).join('');
+}
+$('#r-files').addEventListener('change', e => {
+  for (const f of e.target.files) {
+    const ext = extOf(f);
+    if (ext === 'json') state.rMap = f; else if (['pdf', 'docx', 'txt', 'md'].includes(ext)) state.rDoc = f;
+  }
+  e.target.value = '';
+  showRFiles();
+  if (state.rDoc && (state.rMap || document.querySelectorAll('#map-choices input').length === 1)) $('#r-run').click();
+});
 $('#r-run').addEventListener('click', async () => {
   try {
     say('#m5', t('msg.restoring'), 'ok busy');
     const map = await getMapping();
     const matcher = buildMatcher(map.entries.filter(e => e.values && e.values.length).map(e => ({ variants: [e.label], repl: e.values[0] })));
-    const f = $('#r-doc').files[0], pasted = $('#r-paste').value;
+    const f = state.rDoc || $('#r-doc').files[0], pasted = $('#r-paste').value;
     let d, srcText;
     if (f) {
       const ext = extOf(f), base = safeName(f.name.replace(/\.[^.]+$/, ''));

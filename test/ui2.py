@@ -20,6 +20,8 @@ async def main():
         pg.on("pageerror", lambda e: errs.append("PAGEERR " + str(e)))
         pg.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
         await pg.goto("file://" + os.path.abspath("dist/anonymiseur.html"))
+        await pg.evaluate("localStorage.setItem('anonyx_prefs_v1', JSON.stringify({lang: 'fr', autoTable: false}))")
+        await pg.reload()
         await pg.evaluate("location.hash='#/anonymize'")
         await pg.set_input_files("#file", "test/demo.pdf")
         await wait_msg(pg, "#m1", "chargé")

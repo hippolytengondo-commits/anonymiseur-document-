@@ -329,6 +329,7 @@ function renderSecurity() {
     <div class="row"><button class="btn sec" type="button" data-sec="lock"${vaultOpen() ? '' : ' disabled'}>${esc(t('sec.lockNow'))}</button></div></div>
   <div class="card"><h2>${esc(t('sec.opt.t'))}</h2>
     <label class="switch"><input type="checkbox" id="sec-hist"${prefs.history ? ' checked' : ''}><span><b>${esc(t('sec.optHist'))}</b><span class="hint">${esc(t('sec.optHistH'))}</span></span></label>
+    <label class="switch"><input type="checkbox" id="sec-table"${prefs.autoTable ? ' checked' : ''}><span><b>${esc(t('sec.optTable'))}</b><span class="hint">${esc(t('sec.optTableH'))}</span></span></label>
     <label class="switch"><input type="checkbox" id="sec-names"${prefs.keepNames ? ' checked' : ''}><span><b>${esc(t('sec.optNames'))}</b><span class="hint">${esc(t('sec.optNamesH'))}</span></span></label></div>
   <div class="card"><h2>${esc(t('sec.data.t'))}</h2><ul class="status">${row(t('sec.hist'), t('sec.items', { n: hist }))}${row(t('sec.log'), t('sec.items', { n: act }))}${row(t('sec.tables'), t('sec.items', { n: tabs }))}${legacy ? row(t('sec.legacy'), t('sec.items', { n: legacy })) : ''}</ul>
     <div class="row"><button class="btn sec" type="button" data-sec="clearhist">${esc(t('sec.clearHist'))}</button></div></div>
@@ -361,6 +362,7 @@ $('#sec-body').addEventListener('change', e => {
   if (e.target.id === 'sec-lock') { setPref('lockMin', +e.target.value); if (vaultOpen()) armLock(); }
   else if (e.target.id === 'sec-hist') setPref('history', e.target.checked);
   else if (e.target.id === 'sec-names') setPref('keepNames', e.target.checked);
+  else if (e.target.id === 'sec-table') setPref('autoTable', e.target.checked);
   else return;
   say('#m-sec', t('pf.saved'), 'ok');
 });

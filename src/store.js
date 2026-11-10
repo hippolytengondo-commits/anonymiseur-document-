@@ -8,7 +8,7 @@ function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return 
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
 
 /* ---- Préférences ---- */
-const PREF_DEFAULTS = { lang: '', name: '', history: true, keepNames: false, lockMin: 10, labelLang: 'auto' };
+const PREF_DEFAULTS = { lang: '', name: '', history: true, keepNames: false, lockMin: 10, labelLang: 'auto', autoTable: true };
 let prefs = Object.assign({}, PREF_DEFAULTS, lsGet(KEYS.prefs, {}));
 if (prefs.lang !== 'fr' && prefs.lang !== 'en') prefs.lang = String(navigator.language || 'fr').toLowerCase().startsWith('en') ? 'en' : 'fr';
 function setPref(k, v) { prefs[k] = v; lsSet(KEYS.prefs, prefs); }
