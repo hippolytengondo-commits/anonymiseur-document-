@@ -1,6 +1,6 @@
 /* Service worker : met en cache uniquement les fichiers de ce site (même origine).
    Aucune requête vers un service externe. */
-const CACHE = 'anonyx-24730c688a7b';
+const CACHE = 'anonyx-49e45ccc07b6';
 const FILES = ['./', './index.html', './manifest.webmanifest'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

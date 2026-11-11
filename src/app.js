@@ -127,17 +127,18 @@ function outputsOf(d) {
   const docxFn = async () => ({ data: d.kind === 'docx' ? d.bytes : buildDocxFromText(d.text), mime: MIME.docx });
   const pdfFn = async () => ({ data: await buildPdfFromText(d.text), mime: MIME.pdf });
   const txtFn = async () => ({ data: d.text.replace(/\f/g, '\n\n'), mime: MIME.txt });
-  if (d.kind === 'docx') L.push([t('dl.docx'), 'docx', docxFn, true]);
-  else if (d.kind === 'pdf') {
-    if (NON_LATIN.test(d.text)) L.push([t('dl.docxv'), 'docx', docxFn, true], [t('dl.txt'), 'txt', txtFn], [t('dl.pdf'), 'pdf', pdfFn]);
-    else L.push([t('dl.pdf'), 'pdf', pdfFn, true], [t('dl.docxv'), 'docx', docxFn], [t('dl.txt'), 'txt', txtFn]);
-  }
-  else L.push([t('dl.txt'), 'txt', txtFn, true]);
+  /* Le PDF est proposé pour tout document (Word, PDF ou texte). Il est généré à partir du texte :
+     la mise en page d'origine n'est pas conservée, et la police du PDF ne couvre pas le cyrillique ni le chinois. */
+  const word = (label, primary) => [label, 'docx', docxFn, primary];
+  const wordLabel = d.kind === 'docx' ? t('dl.docx') : t('dl.docxv');
+  if (NON_LATIN.test(d.text)) L.push(word(wordLabel, true), [t('dl.txt'), 'txt', txtFn], [t('dl.pdf'), 'pdf', pdfFn]);
+  else if (d.kind === 'docx') L.push(word(wordLabel, true), [t('dl.pdf'), 'pdf', pdfFn], [t('dl.txt'), 'txt', txtFn]);
+  else L.push([t('dl.pdf'), 'pdf', pdfFn, true], word(wordLabel), [t('dl.txt'), 'txt', txtFn]);
   return L;
 }
 function renderDownloads(box, d, suffix, msgSel, mapping) {
   box.innerHTML = '';
-  if (d.kind === 'pdf' && NON_LATIN.test(d.text) && msgSel) say(msgSel, t('dl.pdfWarn'), 'warn');
+  if (NON_LATIN.test(d.text) && msgSel) say(msgSel, t('dl.pdfWarn'), 'warn');
   for (const [label, ext, fn, primary] of outputsOf(d)) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'btn' + (primary ? '' : ' sec'); b.textContent = label;
@@ -414,9 +415,9 @@ function run() {
     const left = buildMatcher(active.map(i => ({ variants: i.variants, repl: 1 }))).fn(d.text).length;
     const mapping = buildMapping(active);
     state.result = { d, mapping, total, left };
-    renderResult();
     say('#m4', '');
     say('#m3', '');
+    renderResult();
     refreshMapChoices();
     setStep(4);
     if (!state.histId) state.histId = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
