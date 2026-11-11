@@ -21,7 +21,7 @@ const missing = [...used, ...need].filter(k => !k.endsWith('.') && !known.has(k)
 if (missing.length) throw new Error('Clés de traduction manquantes : ' + [...new Set(missing)].join(', '));
 for (const [k, fr, en] of I18N_DATA) if (!fr || !en) throw new Error('Traduction vide : ' + k);
 
-const libs = { PDFJS: rd('vendor/pdf.min.mjs'), WORKER: rd('vendor/pdf.worker.min.mjs'), PDFLIB: rd('vendor/pdf-lib.min.js') };
+const libs = { PDFJS: rd('vendor/pdf.min.mjs'), WORKER: rd('vendor/pdf.worker.min.mjs'), PDFLIB: rd('vendor/pdf-lib.min.js'), JSZIP: rd('vendor/jszip.min.js'), DOCXPREV: rd('vendor/docx-preview.min.js') };
 const code = { ENGINE: rd('src/engine.js'), I18N: rd('src/i18n.js'), STORE: rd('src/store.js'), APP: rd('src/app.js'), UI: rd('src/ui.js') };
 for (const [k, v] of Object.entries({ ...libs, ...code })) {
   if (/<\/script|<!--/i.test(v)) throw new Error('Séquence interdite dans ' + k);

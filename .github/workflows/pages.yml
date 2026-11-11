@@ -24,8 +24,9 @@ jobs:
           git diff --exit-code -- index.html manifest.webmanifest sw.js
       - name: Tests unitaires et moteur
         run: |
-          pip install --quiet python-docx reportlab playwright
+          pip install --quiet python-docx reportlab playwright pymupdf
           python test/make_docx.py
+          python test/make_rich_docx.py
           python test/make_pdf.py
           node test/unit.js
           node test/intl.js

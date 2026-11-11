@@ -328,13 +328,14 @@ function detectLanguages(text) {
 }
 
 /* ---------- Détection automatique ---------- */
+const HS = "[^\\S\\r\\n\\f]";   // espace horizontale : un nom ne déborde pas sur la ligne suivante
 const CAPW = "\\p{Lu}[\\p{L}\\p{N}&'’\\-]*";
-const CONN = "(?:\\s+(?:de|du|des|la|le|les|et|del|las|los|da|do|das|dos|di|of|für|von|van|der|&)\\s+|\\s+d['’]|\\s+)";
+const CONN = "(?:[^\\S\\r\\n\\f]+(?:de|du|des|la|le|les|et|del|las|los|da|do|das|dos|di|of|für|von|van|der|&)[^\\S\\r\\n\\f]+|[^\\S\\r\\n\\f]+d['’]|[^\\S\\r\\n\\f]+)";
 const SEQ = `${CAPW}(?:${CONN}${CAPW}){0,5}`;
 const LF = "(?:GmbH\\s*&\\s*Co\\.?\\s*KG|S\\.\\s?A\\.\\s?de\\s+C\\.\\s?V\\.?|S\\.\\s?de\\s+R\\.\\s?L\\.?(?:\\s+de\\s+C\\.\\s?V\\.?)?|Unipessoal\\s+Lda\\.?|"
   + "SARL|SASU|SAS|SA|SPRLU|SPRL|SUARL|SCS|SNC|GIE|ASBL|SCRL|SCI|EURL|Ltd|LLC|LLP|PLC|plc|Inc|Corp|GmbH|AG|KG|OHG|GbR|UG|mbH|Limited|Ltda|Lda|SRL|SpA|"
   + "S\\.A\\.R\\.L\\.?|S\\.A\\.S\\.?|S\\.A\\.?|S\\.L\\.U\\.?|S\\.L\\.?|S\\.R\\.L\\.?|S\\.P\\.R\\.L\\.?|S\\.p\\.A\\.?|S/A|e\\.V\\.|EIRELI|Eireli)";
-const RE_LEGAL = new RegExp(`(?<![\\p{L}\\p{N}])(${SEQ})\\s+(${LF})(?![\\p{L}\\p{N}])`, 'gu');
+const RE_LEGAL = new RegExp(`(?<![\\p{L}\\p{N}])(${SEQ})${HS}+(${LF})(?![\\p{L}\\p{N}])`, 'gu');
 const ORG_WORDS = "Société|Entreprise|Ets|Établissements|Etablissements|Cabinet|Banque|Groupe|Compagnie|Fondation|Association|Clinique|Hôpital|Université|Ministère|"
  
   + "Empresa|Sociedad|Compañía|Banco|Grupo|Fundación|Asociación|Universidad|Ministerio|Instituto|Cooperativa|Despacho|Bufete|Ayuntamiento|"
@@ -342,11 +343,11 @@ const ORG_WORDS = "Société|Entreprise|Ets|Établissements|Etablissements|Cabin
   + "Firma|Gesellschaft|Unternehmen|Gruppe|Stiftung|Verein|Universität|Krankenhaus|Klinikum|Ministerium|Institut|Genossenschaft|Kanzlei|Behörde|"
   + "Компания|Корпорация|Банк|Группа|Фонд|Ассоциация|Университет|Больница|Министерство|Институт|Агентство|Холдинг|Фирма";
 const ORG_PREP = "(?:(?:of the|of|de la|de las|de los|del|de l['’]|du|des|de|da|do|das|dos|d['’]|für|der|die|das|von|zur|zum)\\s*)?";
-const RE_ORGPREFIX = new RegExp(`(?<![\\p{L}\\p{N}])(?:${ORG_WORDS})\\s+${ORG_PREP}${SEQ}`, 'gu');
+const RE_ORGPREFIX = new RegExp(`(?<![\\p{L}\\p{N}])(?:${ORG_WORDS})${HS}+${ORG_PREP}${SEQ}`, 'gu');
 const RE_ORGOF = new RegExp(`(?<![\\p{L}\\p{N}])(?:University|Bank|Ministry|Department|Institute|Foundation|Hospital|Agency|Council|College|School|Company|Group|Association|Trust|Corporation)\\s+of\\s+(?:the\\s+)?${SEQ}`, 'gu');
 const RE_ORGQUOTED = new RegExp(`(?<![\\p{L}\\p{N}])(?:${ORG_WORDS})\\s*[«"“„]([^»"”“\\n]{2,60})[»"”“]`, 'gu');
 const ORG_SUFFIX = "Group|Holdings|Partners|Associates|Foundation|Institute|University|Bank|Consulting|Industries|Technologies|Solutions|Association|Company|Corporation|Stiftung|Verein|Gruppe|Grupo|Fundación|Fundação|Banco|Universidad|Universidade|Universität|Consultoría|Consultoria|Beratung|Kanzlei";
-const RE_ORGSUFFIX = new RegExp(`(?<![\\p{L}\\p{N}])(${SEQ})\\s+(${ORG_SUFFIX})(?![\\p{L}\\p{N}])`, 'gu');
+const RE_ORGSUFFIX = new RegExp(`(?<![\\p{L}\\p{N}])(${SEQ})${HS}+(${ORG_SUFFIX})(?![\\p{L}\\p{N}])`, 'gu');
 /* Russie : ООО « … », АО « … » */
 const RU_LF = "(?:ООО|ОАО|ЗАО|ПАО|АО|ИП|НКО|ФГУП|МУП|ГУП)";
 const RE_RU_ORGQ = new RegExp(`(?<![\\p{L}\\p{N}])${RU_LF}\\s*[«"“„]([^»"”“\\n]{2,60})[»"”“]`, 'gu');
@@ -371,14 +372,14 @@ function zhStripLead(s) {
 const HON = "(?:M\\.|Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Mme\\.?|Mlle\\.?|Monsieur|Madame|Mademoiselle|Maître|Me|Dr\\.?|Dra\\.?|Docteur|Doctor|Doutor|Doutora|Pr\\.?|Prof\\.?|Professeur|Professor|Profesor|Profesora|Professora|Sieur|Honorable|Hon\\.|Mgr|Sir|Dame|Lord|Lady|"
   + "Sr\\.?|Sra\\.?|Srta\\.?|Señor|Señora|Señorita|Senhor|Senhora|Don|Doña|Dona|D\\.|Dña\\.|Lic\\.|Ing\\.|Eng\\.|Herr|Frau|Fräulein|Dipl\\.-Ing\\.|Mag\\.|г-н|г-жа|господин|госпожа|гражданин|гражданка)";
 const NTOK = "(?:\\p{Lu}[\\p{L}'’\\-]+|\\p{Lu}\\.)";
-const NPART = "(?:\\s+(?:de\\s+la|de\\s+los|de\\s+las|del|de|da|do|das|dos|di|du|von|van|der|den|zu|al|el|bin|ibn))*";
-const NAME = `${NTOK}(?:${NPART}\\s*${NTOK}){0,3}`;
-const RE_HON = new RegExp(`(?<![\\p{L}\\p{N}])(?:${HON}\\s+)+(${NAME})`, 'gu');
+const NPART = `(?:${HS}+(?:de${HS}+la|de${HS}+los|de${HS}+las|del|de|da|do|das|dos|di|du|von|van|der|den|zu|al|el|bin|ibn))*`;
+const NAME = `${NTOK}(?:${NPART}${HS}*${NTOK}){0,3}`;
+const RE_HON = new RegExp(`(?<![\\p{L}\\p{N}])(?:${HON}${HS}+)+(${NAME})`, 'gu');
 const RE_CAPS1 = /(?<![\p{L}\p{N}])\p{Lu}{2,}(?:[ \-]\p{Lu}{2,}){0,2} +\p{Lu}\p{Ll}+(?:[ \-]\p{Lu}\p{Ll}+)?(?![\p{L}])/gu;
 const RE_CAPS2 = /(?<![\p{L}\p{N}])\p{Lu}\p{Ll}+(?:[ \-]\p{Lu}\p{Ll}+)?(?: | )+\p{Lu}{2,}(?: \p{Lu}{2,}){0,2}(?![\p{L}])/gu;
 /* Initiales : « J. R. Smith », « Smith J.R. », « Иванов И.И. » */
-const RE_INIT1 = /(?<![\p{L}\p{N}])\p{Lu}\.\s?(?:\p{Lu}\.\s?)?\p{Lu}[\p{L}'’\-]{2,}(?![\p{L}])/gu;
-const RE_INIT2 = /(?<![\p{L}\p{N}])\p{Lu}[\p{L}'’\-]{2,}\s+\p{Lu}\.\s?(?:\p{Lu}\.)?(?![\p{L}])/gu;
+const RE_INIT1 = /(?<![\p{L}\p{N}])\p{Lu}\.[^\S\r\n\f]?(?:\p{Lu}\.[^\S\r\n\f]?)?\p{Lu}[\p{L}'’\-]{2,}(?![\p{L}])/gu;
+const RE_INIT2 = /(?<![\p{L}\p{N}])\p{Lu}[\p{L}'’\-]{2,}[^\S\r\n\f]+\p{Lu}\.[^\S\r\n\f]?(?:\p{Lu}\.)?(?![\p{L}])/gu;
 const RE_CYR_INIT = /(?<![\p{L}\p{N}])\p{Lu}[а-яё\-]{2,}\s+\p{Lu}\.\s?(?:\p{Lu}\.)?|(?<![\p{L}\p{N}])\p{Lu}\.\s?(?:\p{Lu}\.\s?)?\p{Lu}[а-яё\-]{2,}(?![\p{L}])/gu;
 /* Noms russes complets : Фамилия Имя Отчество, Имя Отчество */
 const RE_RU_FIO = /(?<![\p{L}\p{N}])(?:\p{Lu}[а-яё\-]+\s+)?\p{Lu}[а-яё\-]+\s+\p{Lu}[а-яё]+(?:(?:ович|евич|ьич)(?:а|у|ем|е)?|(?:овна|евна|ична|инична)(?:ы|е|у|ой)?)(?:\s+\p{Lu}[\u0430-\u044f\u0451\-]+)?(?![\p{L}])/gu;

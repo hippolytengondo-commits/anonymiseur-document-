@@ -99,7 +99,11 @@ const I18N_DATA = [
   ['dl.detected', 'Langue détectée : {l}', 'Detected language: {l}'],
   ['dl.chosen', 'Langue retenue : {l}', 'Language used: {l}'],
   ['dl.unknown', 'Langue non déterminée : les règles de toutes les langues sont appliquées.', 'Language not determined: the rules of all languages are applied.'],
-  ['dl.pdfWarn', 'Le PDF généré ne peut pas afficher les caractères cyrilliques ou chinois : utilisez de préférence la version Word (.docx) ou texte (.txt).', 'The generated PDF cannot display Cyrillic or Chinese characters: please use the Word (.docx) or text (.txt) version instead.'],
+  ['dl.pdfFaithful', 'PDF fidèle au Word (via l\'impression)', 'PDF faithful to the Word layout (via printing)'],
+  ['dl.pdfSimple', 'PDF simple (texte seul)', 'Simple PDF (text only)'],
+  ['dl.pdfMulti', "PDF toutes écritures (via l'impression)", 'PDF for all scripts (via printing)'],
+  ['dl.pdfPrep', 'Préparation du PDF…', 'Preparing the PDF…'],
+  ['dl.printHint', "Dans la fenêtre qui s'ouvre, choisissez « Enregistrer au format PDF » comme imprimante, puis Enregistrer. Sur iPhone : touchez Partager, puis « Enregistrer dans Fichiers ».", 'In the window that opens, choose “Save as PDF” as the printer, then Save. On iPhone: tap Share, then “Save to Files”.'],
   ['lg.fr', 'Français', 'French'],
   ['lg.en', 'Anglais', 'English'],
   ['lg.es', 'Espagnol', 'Spanish'],
@@ -380,7 +384,7 @@ const I18N_DATA = [
   ['sec.lim.5', "Chinois : les noms de personnes sont repérés surtout lorsqu'ils sont suivis d'un titre (先生, 女士…) ou précédés d'une étiquette (姓名：…). Russe : les déclinaisons des noms déjà repérés sont reconnues. PDF chinois utilisant des polices non intégrées : le texte peut être illisible.", 'Chinese: personal names are mainly found when followed by a title (先生, 女士…) or preceded by a label (姓名：…). Russian: declined forms of names already found are recognised. Chinese PDFs using non-embedded fonts: the text may be unreadable.'],
   ['sec.lim.6', "Allemand : les noms communs prennent une majuscule, la liste de contrôle complémentaire est donc plus longue.", 'German: common nouns are capitalised, so the additional check list is longer.'],
   ['sec.lim.2', "Les PDF doivent contenir du texte sélectionnable : un PDF numérisé (simple image) n'est pas lisible sans reconnaissance de caractères (OCR). Le texte des images n'est pas traité.", 'PDFs must contain selectable text: a scanned PDF (plain image) cannot be read without optical character recognition (OCR). Text inside images is not processed.'],
-  ['sec.lim.3', "Un PDF anonymisé est régénéré à partir du texte : la mise en page d'origine n'est pas conservée (la version Word est aussi proposée).", 'An anonymised PDF is regenerated from the text: the original layout is not kept (a Word version is also offered).'],
+  ['sec.lim.3', "Le « PDF simple » est régénéré à partir du texte : la mise en page d'origine n'est pas conservée. Pour un Word, le « PDF fidèle » conserve la mise en forme (polices, tableaux, images, en-têtes) grâce à l'impression du navigateur ; l'en-tête et le pied de page de la première section sont répétés sur toutes les pages, et les éléments très complexes (zones de texte, formes, champs) peuvent différer : vérifiez le résultat. Un PDF d'origine ne peut pas être rendu avec sa mise en page.", 'The “simple PDF” is regenerated from the text: the original layout is not kept. For a Word document, the “faithful PDF” keeps the formatting (fonts, tables, images, headers) through the browser\'s printing; the header and footer of the first section are repeated on every page, and very complex elements (text boxes, shapes, fields) may differ: check the result. An original PDF cannot be rendered with its layout.'],
   ['sec.lim.4', "Des éléments indirects (montant, lieu, description d'un projet) peuvent permettre une réidentification.", 'Indirect elements (amount, place, project description) can allow re-identification.'],
 
   /* Abonnement */

@@ -18,7 +18,7 @@ Application web **100 % locale** (PWA, un seul fichier HTML) qui pseudonymise de
 - `src/store.js` : préférences, historique (métadonnées), journal, coffre chiffré, conservation automatique des tables (clé d'appareil), neutralisation CSV.
 - `src/app.js` : espace d'anonymisation et de restauration (import PDF/Word/texte, contrôle, export, PDF via pdf.js et pdf-lib).
 - `src/ui.js` : coque (menu latéral / barre mobile), tableau de bord, documents, correspondances, activités, sécurité, abonnement (maquette), profil, fenêtres.
-- `src/template.html` : page, système de design (variables CSS). `vendor/` : pdf.js, worker et pdf-lib embarqués. `src/brand/`, `src/icons/` : logo et icônes.
+- `src/template.html` : page, système de design (variables CSS). `vendor/` : pdf.js, worker, pdf-lib, JSZip et docx-preview embarqués (versions, licences et empreintes : `vendor/NOTICE.md` ; aucune bibliothèque chargée depuis le réseau). **PDF fidèle** : le Word anonymisé est affiché localement (docx-preview) puis enregistré en PDF par l'impression du navigateur (en-tête/pied répétés via un tableau enveloppant) ; le « PDF simple » est généré à partir du texte (pdf-lib). `src/brand/`, `src/icons/` : logo et icônes.
 - `src/manifest.webmanifest`, `src/sw.js` : application installable (PWA) et mode hors ligne (cache versionné par empreinte).
 - `build.js` : assemble tout (`node build.js`) → `index.html`, `manifest.webmanifest`, `sw.js` à la racine, `dist/`. Vérifie les traductions.
 - `test/` : `unit.js`, `intl.js` (détection dans les 7 langues, textes fictifs) et `run.js` (Node), `ui2.py` (parcours PDF) et `ui3.py` (espaces, coffre, FR/EN, mobile, hors ligne) en Playwright + Chrome, `run_all.sh` pour tout exécuter. Fixtures : `make_docx.py`, `make_pdf.py`.

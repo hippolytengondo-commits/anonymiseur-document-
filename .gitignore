@@ -6,3 +6,7 @@ test/demo.pdf
 test/anon.docx
 test/restored.docx
 _site/
+test/rich.docx
+test/_logo.png
+test/_faithful.pdf
+test/_roundtrip.pdf

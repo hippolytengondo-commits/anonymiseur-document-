@@ -35,6 +35,20 @@ function loadPdfLib() {
     document.head.appendChild(s);
   });
 }
+function loadScriptFrom(id) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = blobUrl(id);
+    s.onload = res;
+    s.onerror = () => rej(new Error(t('err.pdflib')));
+    document.head.appendChild(s);
+  });
+}
+async function loadDocxPreview() {
+  if (window.docx && window.JSZip) return;
+  if (!window.JSZip) await loadScriptFrom('#lib-jszip');
+  if (!window.docx) await loadScriptFrom('#lib-docxprev');
+}
 function layoutText(items) {
   let out = '', lastY = null, lastX2 = null;
   for (const it of items) {
@@ -127,30 +141,107 @@ function outputsOf(d) {
   const docxFn = async () => ({ data: d.kind === 'docx' ? d.bytes : buildDocxFromText(d.text), mime: MIME.docx });
   const pdfFn = async () => ({ data: await buildPdfFromText(d.text), mime: MIME.pdf });
   const txtFn = async () => ({ data: d.text.replace(/\f/g, '\n\n'), mime: MIME.txt });
-  /* Le PDF est proposé pour tout document (Word, PDF ou texte). Il est généré à partir du texte :
-     la mise en page d'origine n'est pas conservée, et la police du PDF ne couvre pas le cyrillique ni le chinois. */
+  /* PDF « simple » : généré à partir du texte (mise en page non conservée, police latine uniquement).
+     PDF « via l'impression » : le document est affiché par le navigateur puis enregistré en PDF ; il conserve la mise
+     en forme d'un Word (polices, tableaux, images, en-têtes) et accepte toutes les écritures (russe, chinois…). */
   const word = (label, primary) => [label, 'docx', docxFn, primary];
   const wordLabel = d.kind === 'docx' ? t('dl.docx') : t('dl.docxv');
-  if (NON_LATIN.test(d.text)) L.push(word(wordLabel, true), [t('dl.txt'), 'txt', txtFn], [t('dl.pdf'), 'pdf', pdfFn]);
-  else if (d.kind === 'docx') L.push(word(wordLabel, true), [t('dl.pdf'), 'pdf', pdfFn], [t('dl.txt'), 'txt', txtFn]);
-  else L.push([t('dl.pdf'), 'pdf', pdfFn, true], word(wordLabel), [t('dl.txt'), 'txt', txtFn]);
+  const txt = [t('dl.txt'), 'txt', txtFn];
+  if (d.kind === 'docx') {
+    L.push(word(wordLabel, true), [t('dl.pdfFaithful'), 'pdf', null, false, 'print']);
+    if (!NON_LATIN.test(d.text)) L.push([t('dl.pdfSimple'), 'pdf', pdfFn]);
+    L.push(txt);
+  } else if (NON_LATIN.test(d.text)) L.push(word(wordLabel, true), [t('dl.pdfMulti'), 'pdf', null, false, 'print'], txt);
+  else L.push([t('dl.pdf'), 'pdf', pdfFn, true], word(wordLabel), txt);
   return L;
 }
 function renderDownloads(box, d, suffix, msgSel, mapping) {
   box.innerHTML = '';
-  if (NON_LATIN.test(d.text) && msgSel) say(msgSel, t('dl.pdfWarn'), 'warn');
-  for (const [label, ext, fn, primary] of outputsOf(d)) {
+  for (const [label, ext, fn, primary, mode] of outputsOf(d)) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'btn' + (primary ? '' : ' sec'); b.textContent = label;
     b.addEventListener('click', async () => {
       b.disabled = true;
-      try { const r = await fn(); download(`${d.name}${suffix}.${ext}`, r.data, r.mime); logActivity('export', { fmt: ext });
+      try {
+        if (mode === 'print') await printAsPdf(d, suffix, msgSel);
+        else { const r = await fn(); download(`${d.name}${suffix}.${ext}`, r.data, r.mime); }
+        logActivity('export', { fmt: ext });
         if (mapping && prefs.autoTable) { setTimeout(() => exportMap(mapping, 'json', state.name), 600); say(msgSel, t('dl.autoTable'), 'ok'); } }
       catch (e) { say(msgSel, t('err.generic', { m: e.message || e }), 'err'); }
       b.disabled = false;
     });
     box.appendChild(b);
   }
+}
+/* ---- PDF avec mise en forme : affichage local du document puis impression du navigateur ---- */
+const PRINT_OPTS = { className: 'docx', inWrapper: false, ignoreFonts: true, useBase64URL: true, breakPages: true, renderHeaders: true, renderFooters: true, renderFootnotes: true, renderEndnotes: true };
+const BULLETS = [[/\uf0b7/g, '\u2022'], [/\uf0a7/g, '\u25aa'], [/\uf0d8/g, '\u27a2'], [/\uf0fc/g, '\u2713'], [/font-family:\s*(?:Symbol|Wingdings)[^;]*;/gi, '']];
+/* Chaque section Word devient un tableau dont les cellules d'en-tête et de pied réservent les marges sur chaque page ;
+   l'en-tête et le pied de la première section sont fixés en haut et en bas de toutes les pages. */
+function frameSections(root) {
+  const secs = [...root.querySelectorAll('section.docx')];
+  if (!secs.length) return '@page{margin:0}';
+  const px = v => parseFloat(v) || 0, num = v => Math.abs(parseFloat(String(v || '').replace(/[^0-9.\-]/g, '')) || 0);
+  let page = '';
+  secs.forEach((s, i) => {
+    const cs = getComputedStyle(s);
+    const m = { w: px(cs.width), h: px(cs.minHeight), t: px(cs.paddingTop), r: px(cs.paddingRight), b: px(cs.paddingBottom), l: px(cs.paddingLeft) };
+    const hd = s.querySelector(':scope > header'), art = s.querySelector(':scope > article'), ft = s.querySelector(':scope > footer');
+    if (i === 0) page = `@page{size:${(m.w * 0.75).toFixed(2)}pt ${(m.h * 0.75).toFixed(2)}pt;margin:0}`;
+    const tb = document.createElement('table');
+    tb.className = 'pframe';
+    if (i > 0) tb.style.breakBefore = 'page';
+    const cell = tag => { const g = document.createElement(tag), r = document.createElement('tr'), c = document.createElement('td'); r.appendChild(c); g.appendChild(r); tb.appendChild(g); return c; };
+    const th = cell('thead'), tbd = cell('tbody'), tf = cell('tfoot');
+    th.style.cssText = `height:${m.t}px;padding:0`;
+    tf.style.cssText = `height:${m.b}px;padding:0`;
+    tbd.style.cssText = `padding:0 ${m.r}px 0 ${m.l}px;vertical-align:top`;
+    if (hd && i === 0) { const off = num(hd.style.marginTop); hd.style.cssText = `position:fixed;top:${Math.max(0, m.t - off)}px;left:${m.l}px;right:${m.r}px;margin:0;min-height:0`; s.appendChild(hd); } else if (hd) hd.remove();
+    if (ft && i === 0) { const off = num(ft.style.marginBottom); ft.style.cssText = `position:fixed;bottom:${Math.max(0, m.b - off)}px;left:${m.l}px;right:${m.r}px;margin:0;min-height:0`; s.appendChild(ft); } else if (ft) ft.remove();
+    if (art) tbd.appendChild(art);
+    s.appendChild(tb);
+  });
+  return page + 'section.docx{padding:0!important;width:auto!important;min-height:0!important;box-shadow:none!important;margin:0!important;background:none!important}table.pframe{width:100%;border-collapse:collapse;table-layout:fixed}table.pframe>*>tr>td{border:0}';
+}
+function textPrintView(root, text) {
+  const wrap = document.createElement('div');
+  wrap.className = 'txtprint';
+  text.split('\f').forEach((pg, i) => { const div = document.createElement('div'); div.className = 'txtpage'; if (i) div.style.breakBefore = 'page'; div.textContent = pg; wrap.appendChild(div); });
+  root.appendChild(wrap);
+  return '@page{size:A4;margin:20mm}.txtprint{font:11pt/1.45 "Segoe UI","Helvetica Neue",Arial,"Noto Sans","Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;color:#000}.txtpage{white-space:pre-wrap;overflow-wrap:anywhere}';
+}
+async function buildPrintView(d) {
+  const root = $('#print-root');
+  root.innerHTML = '';
+  let css;
+  if (d.kind === 'docx') {
+    await loadDocxPreview();
+    await window.docx.renderAsync(d.bytes, root, null, PRINT_OPTS);
+    for (const st of root.querySelectorAll('style')) { let x = st.textContent; for (const [re, to] of BULLETS) x = x.replace(re, to); st.textContent = x; }
+    css = frameSections(root);
+  } else css = textPrintView(root, d.text);
+  let st = $('#print-style');
+  if (!st) { st = document.createElement('style'); st.id = 'print-style'; document.head.appendChild(st); }
+  st.textContent = css;
+}
+function endPrintView() {
+  document.body.classList.remove('printing');
+  $('#print-root').innerHTML = '';
+  const st = $('#print-style');
+  if (st) st.textContent = '';
+}
+let printTitle = '';
+async function printAsPdf(d, suffix, msgSel) {
+  if (msgSel) say(msgSel, t('dl.pdfPrep'), 'ok busy');
+  await buildPrintView(d);
+  printTitle = document.title;
+  document.title = `${d.name}${suffix}`;                 // nom proposé pour le fichier PDF
+  document.body.classList.add('printing');
+  const done = () => { endPrintView(); document.title = printTitle; window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  if (msgSel) say(msgSel, t('dl.printHint'), 'ok');
+  await new Promise(r => setTimeout(r, 200));            // laisser le temps aux images de s'afficher
+  window.print();
 }
 const previewHtml = t => t.replace(/\f/g, '\n\n— — —\n\n');
 

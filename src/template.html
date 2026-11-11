@@ -193,6 +193,13 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
   .steps li.cur em{display:inline}
 }
 @media print{.side,.topbar,.tabbar,.sheet{display:none}.main-col{margin:0}}
+/* Impression en PDF : seul le document préparé est imprimé */
+#print-root{display:none}
+@media print{
+  body.printing>:not(#print-root){display:none!important}
+  body.printing #print-root{display:block!important;margin:0;padding:0}
+  body.printing{background:#fff!important;margin:0}
+}
 </style>
 </head>
 <body>
@@ -434,11 +441,14 @@ mark{background:#cfeaff;color:#06243a;padding:0 3px;border-radius:3px}
 <div class="sheet" id="sheet" hidden></div>
 </div>
 <div id="modal"></div>
+<div id="print-root" aria-hidden="true"></div>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
 <script type="text/plain" id="lib-pdfjs">/*@@PDFJS@@*/</script>
 <script type="text/plain" id="lib-worker">/*@@WORKER@@*/</script>
 <script type="text/plain" id="lib-pdflib">/*@@PDFLIB@@*/</script>
+<script type="text/plain" id="lib-jszip">/*@@JSZIP@@*/</script>
+<script type="text/plain" id="lib-docxprev">/*@@DOCXPREV@@*/</script>
 <script>
 /*@@ENGINE@@*/
 /*@@I18N@@*/

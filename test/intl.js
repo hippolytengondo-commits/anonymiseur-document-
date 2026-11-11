@@ -149,5 +149,13 @@ ok('désignations adresse et numéro dans les 7 langues', () => {
   assert.strictEqual(E.formatLabel('address', 2), 'Adresse B');
   assert.strictEqual(E.formatLabel('number', 3, 'en'), '[NUMBER 3]');
 });
+ok('un nom de personne ou de société ne déborde pas sur la ligne suivante', () => {
+  const t = 'Signature de Monsieur Paul Dupont — Madame Anne Martin\nLigne de remplissage pour Alpha Conseil\nSARL";\nProjet Soleil';
+  const det = E.detect(t, ALL);
+  const all = det.flatMap(d => d.variants);
+  assert.ok(!all.some(v => /\n/.test(v)), 'variante sur deux lignes : ' + JSON.stringify(all));
+  assert.ok(!all.includes('Ligne') && !all.includes('Projet'), 'mot de la ligne suivante absorbé : ' + JSON.stringify(all));
+  assert.ok(all.includes('Anne Martin') && all.includes('Paul Dupont'));
+});
 console.log(`${n} tests réussis, ${bad} échec(s)`);
 process.exit(bad ? 1 : 0);
